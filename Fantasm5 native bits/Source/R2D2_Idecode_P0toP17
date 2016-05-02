@@ -1,0 +1,161 @@
+	include	r2d2_support_macros
+	include	r2d2_IDecode_set_pipe.def
+*******************************************************************************
+*Project:                                                                     *
+*Author:        Stu                                                           *
+*Filename:      r2d2_primary decode p0-p17+p_illegal                          *
+*Version:                                                                     *
+*Date started:  12:04:30 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+
+	macs_last
+p_illegal:	*Sets pipe to dont care - all -1
+	blr
+	sub_in
+	li	r3,0
+	lwz	r4,the_instruction(`bss)
+	bl	IDecode_set_int_pipe	*decodes r3 and sets pipe fields
+	sub_out
+	global	p_illegal
+
+p_2:		*tdi
+	sub_in
+	li	r3,0
+	lwz	r4,the_instruction(`bss)
+	bl	IDecode_set_int_pipe	*decodes r3 and sets pipe fields
+	li	r5,bra_class	*4=bra
+	stw	r5,pipeR_instr_class(r20)
+	sub_out
+	global	p_2
+p_3:		*twi
+	sub_in
+	li	r3,0	*NFI
+	lwz	r4,the_instruction(`bss)
+	bl	IDecode_set_int_pipe	*decodes r3 and sets pipe fields
+**Set class
+	li	r5,bra_class	*4=bra
+	stw	r5,pipeR_instr_class(r20)
+
+	sub_out
+	global	p_3
+	
+p_7:		*MUlli - rt,ra,si
+	sub_in
+	li	r3,pipe_DS+pipe_A
+	lwz	r4,the_instruction(`bss)
+	bl	IDecode_set_int_pipe	*decodes r3 and sets pipe fields
+**Set class
+	li	r5,int_class
+	stw	r5,pipeR_instr_class(r20)
+	sub_out
+	global	p_7
+	
+p_8:		*subfic - same as mulli
+	b	p_7
+;	sub_in
+;	sub_out
+	global	p_8
+
+p_10:		*cmpli - bf,ra,ui
+	sub_in
+	li	r3,pipe_A
+	lwz	r4,the_instruction(`bss)
+	bl	IDecode_set_int_pipe	*decodes r3 and sets pipe fields
+**now set BF in pipeR_tocc
+	extrwi	r5,r4,3,6
+	stw	r5,pipeR_tocc(r20)
+**Set class
+	li	r5,int_class+cmp_class
+	stw	r5,pipeR_instr_class(r20)
+
+	sub_out
+	global	p_10
+	
+p_11:	*cmpi - same as 10
+	b	p_10
+;	sub_in
+;	sub_out
+	global	p_11
+
+p_12:	**Addic - same as 8
+	b	p_7
+;	sub_in
+;	sub_out
+	global	p_12
+
+p_13:	**Addic.
+	sub_in
+	li	r3,pipe_DS+pipe_A
+	lwz	r4,the_instruction(`bss)
+	bl	IDecode_set_int_pipe	*decodes r3 and sets pipe fields
+**Set record bit
+	li	r5,0
+	stw	r5,pipeR_tocc(r20)	*ASK ROB
+**Set class
+	li	r5,int_class
+	stw	r5,pipeR_instr_class(r20)
+
+	sub_out
+	global	p_13
+	
+p_14:	*addi
+	b	p_7
+;	sub_in
+;	sub_out
+	global	p_14
+
+p_15:
+	b	p_7	*addis
+;	sub_in
+;	sub_out
+	global	p_15
+
+p_16:	*branch conditional, bi field specifies which bit in cr
+	sub_in	*We also need to set the from ctr flag if it's active (BO field)
+	lwz	r4,the_instruction(`bss)
+
+**if bo[4] is set then there is no condition
+	extrwi	r5,r4,5,6	*BO at bit 11 for 5 bits
+	andi.	r5,r5,16
+	bne	no_condition
+
+**get bit, divide by 8 to get cc field
+	extrwi	r5,r4,5,11	*BI at bit 11 for 5 bits
+	srwi	r5,r5,2		*div 4 gives field
+	stw	r5,pipeR_fromcc(r20)
+no_condition:
+**if bo[2] is not set then we need the counter too
+	extrwi	r5,r4,5,6	*BI at bit 11 for 5 bits
+	andi.	r5,r5,4
+	bne	no_bctr
+**Set from ctr
+	li	r5,1
+	stw	r5,pipeR_fromctr(r20)
+no_bctr:
+**Check whether link register is set
+**NO don't because it wont take any time to set the link register to the next address
+
+;	debug
+;	andi.	r4,r4,0
+;	beq	no_link
+;	li	r5,1
+;	stw	r5,pipeR_tolink(r20)
+
+;no_link:
+**Set class
+	li	r5,bra_class
+	stw	r5,pipeR_instr_class(r20)
+	sub_out
+	global	p_16,no_condition,no_bctr
+	
+p_17:	*SC
+**Set class
+	li	r5,bra_class+flush_class	*synchronizing
+	stw	r5,pipeR_instr_class(r20)
+	blr	*NFI - leave it at all -1s.
+	global	p_17
+
+	extern	IDecode_set_int_pipe

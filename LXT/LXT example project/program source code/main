@@ -1,0 +1,43 @@
+****************************************************
+*An example project showing how to use LXT
+*REQUIRES FANTASM 5.1 and LXT
+*Auth: SB
+*Date: 220198
+****************************************************
+
+*This program does nothing, but gives you the basics of how to use
+*LXT
+*Create a window, Print "hi" and quit when mouse button pressed
+*IMPORTANT - ANVIL 2 WILL REQUIRE ABOUT 10 MEGS OF RAM ALLOCATED TO
+*IT TO BUILD NATIVE LXT PROJECTS. LESS THAN THI WILL RESULT IN MANY UNDEFINED
+*INSTRUCTION MESSAGES.
+
+main:
+	entry  *Tell Fantasm where code execution starts
+
+	if	PPC
+	LXT_Init	*For PPC we need to set up some LXT stuff
+;	else		*For a larger 68K prog, you would need this to zero the a5 globals
+;	bsr	a5_init
+	endif
+	bsr	initialize	*file - init.s
+	bsr	create_and_open_a_window	*File window
+	tst.l	my_window(a5)	*did we get a window? This will be zero if not
+	beq	we_failed	*no.
+**The window is open, so print "Hello"
+	qmove.l	#60,d0	*Cursor x
+	qmove.l	#120,d1	*Cursor y
+	OSMoveTo	d0,d1
+	lea	hello_text(pc),a0	*The string to print
+	OSDrawString	a0
+wait_for_mouse_button:
+	OSButton	d0	*Returns a 1 in d0 when button is down
+	beq.s	wait_for_mouse_button
+**Quit
+we_failed:
+	OSExitToShell	*End of program
+**Data follows
+hello_text:	pstring	"Press the mouse button to quit"
+	align
+**Linkage follows
+	extern	create_and_open_a_window,initialize

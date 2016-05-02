@@ -1,0 +1,27 @@
+*******************************************************************************
+*Project:                                                                     *
+*Author:        ???                                                           *
+*Filename:      Untitled 2                                                    *
+*Version:                                                                     *
+*Date started:  13:17:05 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+**operand encodings
+pipe_DS	equ	1
+pipe_A	equ	2
+pipe_B	equ 4
+pipe_C	equ	8
+pipe_D	equ	16
+pipe_RB	equ	32	*record bit set
+pipe_OE	equ	64	*oe bit set
+pipe_LK	equ	128
+pipe_CTR	equ	256
+pipe_BOBI	equ	512
+pipe_crA	equ	1024
+pipe_crB	equ	2048
+pipe_crC	equ	4096
+pipe_crD	equ	8192
+pipe_crbD	equ	16384
+pipe_mtcrf	equ	32768

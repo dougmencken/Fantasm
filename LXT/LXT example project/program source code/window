@@ -1,0 +1,25 @@
+****************************************************
+*An example project showing how to use LXT
+*REQUIRES FANTASM 5.1 and LXT
+*Auth: SB
+*Date: 220198
+****************************************************
+*This program does nothing, but gives you the basics of how to use
+*LXT
+*Create a window, Print "hi" and quit when mouse button pressed
+create_and_open_a_window:
+	public	create_and_open_a_window
+	qmove.l	#0,a0	*wStorage
+	lea	window_size_rectangle(pc),a1	*Size of window (a rectangle defined as top,left,bottom,right)
+	lea	window_title(pc),a2	*Title to go in windows titlebar	
+	qmove.l	#1,d3	*1=draw window, 0=create but dont draw, just create
+	qmove.l	#0,d4	*window definition ID (0=doc proc etc.)
+	qmove.l	#-1,d5	*Put the window in front of any others
+	clr.l	d6		*If true, window has a goaway box
+	clr.l	d7		*refcon - not used
+	OSNewCWindow	a0,a1,a2,d3,d4,d5,d6,d7,d0	*Create window and return CWindowRecord in d0
+	qmove.l	d0,my_window(a5)	*Store ptr to window (or zero if failed)
+	rts_	"Create_and_open_a_window"
+**Data
+window_size_rectangle:	dc.w	40,40,300,300	*top,left,bottom,right
+window_title:	pstring	"My Window"

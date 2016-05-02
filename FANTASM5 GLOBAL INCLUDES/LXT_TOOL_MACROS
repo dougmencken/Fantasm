@@ -1,0 +1,13 @@
+call_ccp:	macro
+	if 	PPC
+	mr	r5,r20	*pointer to params
+	lwz	r3,callback(r25)	*16
+	lwz	r4,anvil_info(rtoc)	*20
+	Xcall	CallUniversalProc
+	else
+	move.l	a0,-(sp)	*request parameter block to anvil
+	qmove.l	callback(a5),a0
+	jsr	(a0)
+	addq.l	#4,sp
+	endif			*tidy up stack (Ah)
+	endm

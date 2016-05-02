@@ -1,0 +1,87 @@
+NOTES ABOUT LOCAL LABELS
+========================
+
+
+1. Entries (generally) marked by "LLBLS-RP200797".
+
+
+2. Main file is "local_labels.s".
+
+
+3. Directives/Labels not covered.
+
+
+	SET	- I don't think this is really any use?
+	
+	REG/REQU - Yuck! 
+		
+	RS - Yuck also!
+	
+	GLOBOFF - Yuck - but how do we tell if its a globoff in the code???? (can't/don't need to)
+
+	EQU - Not currently, but perhaps in the future??
+	
+	MACRO - Not currently, but perhaps in the future???
+	
+	
+
+4. "do_pass1_optimised.s" is not in the project, appears older, and therefore has not had
+any of the local label changes made to it.
+
+
+5. The following have specific error checks:
+
+	set
+	reg/requ
+	equ
+	rs
+	globoff
+	macro
+	global (not allowed!)
+	extern (not allowed!)
+	code toc routines [T]
+	
+	
+	
+6. PPC data can now be made 'semi-local' by using a locally defined data label - this
+prefixes with a section directive. If no label is used after the section directive, the 
+chance of getting two the same == very slim!!!!!!
+
+
+
+7. Although stu has a tape saying (in my voice) there will be no bugs with the locals,
+I do think (now I've done it) if we don't get bugs, I'll be bloody suprised!!!!
+
+
+
+8. All of the above needs very careful testing in a multitude of situations.
+
+
+9. When the assembler is reporting local labels, they will be prefixed with the local
+section name. I suggest we leave this in, and only patch it if it gets on our tits too
+much.
+
+
+10. Both data and code labels can be local, both in PowerPC and 68K.
+
+
+11. Local labels, (automatically generated prefix) use up 10 characters of the label space
+leaving 18 characters.
+
+
+12. Section directive can be used with or without a subsequent label. Without a label, a 
+prefixed is generated, using various magic methods, which is unique (very nearly always). 
+Otherwise, the label following is converted into a prefix for all subsubsquent local
+labels (until another section directive).
+
+
+13. Use caution when putting comments after a section directive without a subsequent label
+on the same line... always use a semicolon or askerisk......
+
+
+14. 
+
+
+
+-EOF-
+

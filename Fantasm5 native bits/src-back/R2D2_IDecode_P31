@@ -1,0 +1,285 @@
+*******************************************************************************
+*Project:                                                                     *
+*Author:        Stu                                                           *
+*Filename:      r2d2_primary decode p31                                       *
+*Version:                                                                     *
+*Date started:  12:04:30 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+p_31:
+	sub_in
+**Straight into secondary decode
+	lwz	r4,the_instruction(`bss)
+	extrwi	r5,r4,10,21	*we take the 10 bits from 21 to 30 and search on the number
+	lwz	r3,po31_search_tab(rtoc)	*Secondary opcodes
+**FInd secondary
+	li	r6,0
+find_second:	lha	r7,(r3)
+	cmpwi	r7,-1
+	beq	illegal_secondary_op
+	cmpw	r7,r5
+	beq	got_second
+	addi	r6,r6,4	*index into branch table
+	addi	r3,r3,2
+	b	find_second
+got_second:
+	lwz	r5,[t]po31_bra_tab(rtoc)
+	add	r6,r6,r5
+	mtctr	r6
+	bctrl
+	sub_out
+	global	got_second
+illegal_secondary_op:
+	Debug
+	sub_out
+	global	illegal_secondary_op
+	global	p_31,po31_bra_tab
+	
+po31_bra_tab:	toc_routine
+	b	cmp
+	extern	cmp
+	b	tw	*trap word - same a cmp
+	extern	tw
+	b	three_dot_no_load	*not o which is 520
+	extern	three_dot_no_load	
+	b	three_dot_no_load	*mulhdu
+	b	three_dot_no_load	*addc
+	b	three_dot_no_load	*mulhwu
+	b	mfcr	*move from condition register
+	extern	mfcr
+	b	three_load
+	extern	three_load
+	b	three_load	*ldx
+	b	three_load	*lwzx
+	b	three_dot_no_load	*slw
+	b	two_dot_no_load	*cntlzw[.]
+	extern	two_dot_no_load
+	b	three_dot_no_load	*sld
+	b	three_dot_no_load
+	b	cmp	*cmpl
+	b	three_dot_no_load	*subf
+	b	three_load	*ldux
+	b	three_no_load	*dcbst - frig because rt is zeroed out
+	extern	three_no_load
+	b	three_load	*lwzux
+	b	two_dot_no_load	*cntlzd
+	b	three_dot_no_load	*andc[.]
+	b	tw	*td
+	b	three_dot_no_load	*mullhd[.]
+	b	three_dot_no_load	*mulhw[.]
+	b	nil_dependencies	*mfmsr
+	extern	nil_dependencies
+	b	three_load	*ldarx
+	b	just_A	*dcbf
+	extern	just_A
+	b	three_load	*lbzx
+	b	two_dot_no_load	*negate
+	b	three_dot_no_load	*lbzux
+	b	three_dot_no_load	*nor[.]
+	b	three_dot_no_load	*subfe[.]
+	b	three_dot_no_load	*adde[.]
+	b	store_DS	*mtcrf	
+	extern	store_DS
+	b	store_DS
+	b	store_three	*stdx
+	b	store_three_dot	*stwcx.
+	extern	store_three_dot
+	b	store_three	*stwx
+	b	store_three	*Stdux
+	b	store_three	*stwux
+	b	two_dot_no_load	*subfze[.]
+	b	two_dot_no_load	*addze[.]
+	b	store_DS	*mtsr - FAnt dont handle this instruction
+	b	store_three_dot	*stdcx
+	b	store_three	*stbx
+	b	two_dot_no_load
+	b	three_dot_no_load	mulld[.]
+	b	two_dot_no_load	*addme[.]
+	b	three_dot_no_load	*mullw[.]
+	b	nil_dependencies	*mtsrin	- not handled by fant
+	b	three_no_load	*dcbtst - frig because rt is zeroed out
+	b	store_three	*stbux
+	b	three_dot_no_load	*add[.]
+	b	three_no_load	*dcbt
+	b	three_load		*lhzx
+	b	three_dot_no_load	*eqv[.]
+	b	nil_dependencies	*tlbie
+	b	nil_dependencies	*eciwx
+	b	three_load	*lhzux
+	b	three_dot_no_load	*xor[.]
+	b	nil_dependencies	*mfspr
+	b	three_load	*lwx
+	b	three_load	lhax
+	b	nil_dependencies	*tlbia
+	b	nil_dependencies	*mftb
+	b	three_load	*lwaux
+	b	three_load	*lhaux - 375
+	b	store_three	*sthx
+	b	three_dot_no_load	*orc[.]
+	b	nil_dependencies	*sradi	(not handled)
+	b	nil_dependencies	*slbie
+	b	nil_dependencies	*ecowx
+	b	store_three	*sthux
+	extern	store_three	
+	b	three_dot_no_load	*or[.] 444
+	b	three_dot_no_load	*divdu[.]
+	b	three_dot_no_load	*divwu[.]
+	b	nil_dependencies	*mtspr
+	b	three_no_load	*dcbi
+	b	three_dot_no_load	*nand[.]
+	b	three_dot_no_load	*divd[.]
+	b	three_dot_no_load	*divw[.]
+	b	nil_dependencies	*slbia
+	b	to_cr	*6-8 tocc
+	extern	to_cr
+**520-523 now
+	b	three_dot_no_load	*subfco[.]	
+	b	three_dot_no_load	*mulhdu
+	b	three_dot_no_load	*addc
+	b	three_dot_no_load	*mulhwu
+
+	b	three_no_load	*lswx - 533
+	b	three_no_load	*lwbrx - 534
+	b	float_three_load	*lfsx
+	extern	float_three_load	
+
+po31_search_tab:	data	*A list of secondary op codes
+	dc.h	0
+	dc.h	4
+	dc.h	8
+	dc.h	9
+	dc.h	10
+	dc.h	11
+	dc.h	19
+	dc.h	20
+	dc.h	21
+	dc.h	23
+	dc.h	24
+	dc.h	26
+	dc.h	27
+	dc.h	28
+	dc.h	32
+	dc.h	40
+	dc.h	53
+	dc.h	54
+	dc.h	55
+	dc.h	58
+	dc.h	60
+	dc.h	68
+	dc.h	73
+	dc.h	75
+	dc.h	83
+	dc.h	84
+	dc.h	86
+	dc.h	87
+	dc.h	104
+	dc.h	119
+	dc.h	124
+	dc.h	136
+	dc.h	138
+	dc.h	144
+	dc.h	146
+	dc.h	149
+	dc.h	150
+	dc.h	151
+	dc.h	181
+	dc.h	183
+	dc.h	200
+	dc.h	202
+	dc.h	210
+	dc.h	214
+	dc.h	215
+	dc.h	232
+	dc.h	233
+	dc.h	234
+	dc.h	235
+	dc.h	242
+	dc.h	246
+	dc.h	247
+	dc.h	266
+	dc.h	278
+	dc.h	279
+	dc.h	284
+	dc.h	306
+	dc.h	310
+	dc.h	311
+	dc.h	316
+	dc.h	339
+	dc.h	341
+	dc.h	343
+	dc.h	370
+	dc.h	371
+	dc.h	373
+	dc.h	375
+	dc.h	407
+	dc.h	412
+	dc.h	413
+	dc.h	434
+	dc.h	438
+	dc.h	439
+	dc.h	444
+	dc.h	457
+	dc.h	459
+	dc.h	467
+	dc.h	470
+	dc.h	476
+	dc.h	489
+	dc.h	491
+	dc.h	492
+	dc.h	512
+	dc.h	520	*x
+	dc.h	521	*x
+	dc.h	522	*x
+	dc.h	523	*x
+	dc.h	533
+	dc.h	534
+	dc.h	535
+	dc.h	536
+	dc.h	539
+	dc.h	552	*x
+	dc.h	566
+	dc.h	567
+	dc.h	585	*x
+	dc.h	587	*x
+	dc.h	595
+	dc.h	597
+	dc.h	598
+	dc.h	599
+	dc.h	616	*x
+	dc.h	631
+	dc.h	648	*x
+	dc.h	650	*x
+	dc.h	659
+	dc.h	661
+	dc.h	662
+	dc.h	663
+	dc.h	695
+	dc.h	712	*x
+	dc.h	714	*x
+	dc.h	725
+	dc.h	727
+	dc.h	744	*x
+	dc.h	745	*x
+	dc.h	746	*x
+	dc.h	747	*x
+	dc.h	759
+	dc.h	778	*x
+	dc.h	790
+	dc.h	792
+	dc.h	794
+	dc.h	824
+	dc.h	854
+	dc.h	918
+	dc.h	922
+	dc.h	954
+	dc.h	969	*x
+	dc.h	971	*x
+	dc.h	982
+	dc.h	983
+	dc.h	986
+	dc.h	1001	*x
+	dc.h	1003	*x
+	dc.h	1014
+	dc.h	0xffff	*Eh?

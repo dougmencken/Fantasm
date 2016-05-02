@@ -1,0 +1,11 @@
+****************************************************
+*An example project showing how to use LXT
+*REQUIRES FANTASM 5.1 and LXT
+*Auth: SB
+*Date: 220198
+****************************************************
+*This program does nothing, but gives you the basics of how to use
+*LXT
+*Create a window, Print "hi" and quit when mouse button pressed
+**Program global variables
+my_window:	globoff.l	1	*where we store our window ptr

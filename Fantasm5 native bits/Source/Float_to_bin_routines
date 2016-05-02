@@ -1,0 +1,169 @@
+	include	r2d2_support_macros
+**NEEDS mathlib 
+
+	macs_last
+**to float
+	import str2dec
+	import	dec2f
+	import	sin
+;	entry
+**ptr to string in r4
+fant_to_single:
+	sub_in
+	mr	r3,r4	*string in param1
+	lwz	r4,ix(rtoc)	*position in string to start parsing from
+	li	r5,0
+	sth	r5,(r4)	*set index
+	lwz	r5,decimal(rtoc)
+	lwz	r6,vp(rtoc)	*result
+	Xcall	str2dec
+	macs_last
+**must return r3=-1 or ptr to data
+	lwz	r3,decimal(rtoc)
+	Xcall	dec2f
+	macs_last
+	mr	r6,r3	*get result
+	lwz	r3,vp(rtoc)
+	lhz	r3,(r3)	*1 if succesful
+	cmpwi	r3,1
+	bne	single_failed	*return 0
+	lwz	r3,result(rtoc)
+	stfs	f1,(r3)	*return r3 as a pointer, or zero if failed
+single_failed:
+	sub_out
+
+**ptr to string in r4 - string is angle in degrees
+fant_to_single_sin:
+	sub_in
+	mr	r3,r4	*string in param1
+	lwz	r4,ix(rtoc)	*position in string to start parsing from
+	li	r5,0
+	sth	r5,(r4)	*set index
+	lwz	r5,decimal(rtoc)
+	lwz	r6,vp(rtoc)	*result
+	Xcall	str2dec
+	macs_last
+**must return r3=-1 or ptr to data
+	lwz	r3,decimal(rtoc)
+	Xcall	dec2f
+	macs_last
+	mr	r6,r3	*get result
+	lwz	r3,vp(rtoc)
+	lhz	r3,(r3)	*1 if succesful
+	cmpwi	r3,1
+	bne	single_sin_failed	*return 0
+**Convert from degrees to radians with
+*x*pi/180
+	lwz	r3,s_pi(rtoc)
+	lfs	F2,(r3)
+	lwz	r3,s_180(rtoc)
+	lfs	f3,(r3)
+	fmul	f1,f1,f2	*x*pi
+	fdiv	f1,f1,f3	*x*pi/180
+**Number in f1
+	Xcall	sin
+	macs_last
+	lwz	r3,result(rtoc)
+**result in r3
+	stfs	f1,(r3)	*return r3 as a pointer, or zero if failed
+single_sin_failed:
+	sub_out
+
+**ptr to string in r4
+fant_to_double_sin:
+	sub_in
+	mr	r3,r4	*string in param1
+	lwz	r4,ix(rtoc)	*position in string to start parsing from
+	li	r5,0
+	sth	r5,(r4)	*set index
+	lwz	r5,decimal(rtoc)
+	lwz	r6,vp(rtoc)	*result
+	Xcall	str2dec
+	macs_last
+**must return r3=-1 or ptr to data
+	lwz	r3,decimal(rtoc)
+	Xcall	dec2num
+	macs_last
+	mr	r6,r3	*get result
+	lwz	r3,vp(rtoc)
+	lhz	r3,(r3)	*1 if succesful
+	cmpwi	r3,1
+	bne	double_sin_failed	*return 0
+**Convert from degrees to radians with
+*x*pi/180
+	lwz	r3,d_pi(rtoc)
+	lfd	F2,(r3)
+	lwz	r3,d_180(rtoc)
+	lfd	f3,(r3)
+	fmul	f1,f1,f2	*x*pi
+	fdiv	f1,f1,f3	*x*pi/180
+	Xcall	sin
+	macs_last
+	lwz	r3,result(rtoc)
+**result in r3
+	stfd	f1,(r3)	*return r3 as a pointer, or zero if failed
+double_sin_failed:
+	sub_out
+
+************
+fant_to_double:
+	sub_in
+	mr	r3,r4	*string in param1
+	lwz	r4,ix(rtoc)	*position in string to start parsing from
+	li	r5,0
+	sth	r5,(r4)	*set index
+	lwz	r5,decimal(rtoc)
+	lwz	r6,vp(rtoc)	*result
+	Xcall	str2dec
+	macs_last
+	lwz	r4,ix(rtoc)	*position in string to start parsing from
+	lhz	r3,(r4)
+**must return r3=-1 or ptr to data
+	lwz	r3,decimal(rtoc)
+	Xcall	dec2num
+	macs_last
+	mr	r6,r3	*get result
+	lwz	r3,vp(rtoc)
+	lhz	r3,(r3)	*1 if succesful
+	cmpwi	r3,1
+	bne	double_failed	*return 0
+	lwz	r3,result(rtoc)
+	stfd	f1,(r3)	*return r3 as a pointer, or zero if failed
+double_failed:
+	sub_out
+******************
+;struct decimal 
+;{
+;	 char sgn;
+;	 char unused;
+;	 short exp;
+;	 struct 
+;	 {
+;	 	 unsigned char length;
+;	 	 unsigned char text[SIGDIGLEN];
+;	 	 unsigned char unused;
+;	 } sig;
+;} decimal;
+;sgn	The sign of the number (0 is positive, 1 is negative).
+;exp	The exponent of the number. The exponent is expressed as a power of 10.
+
+;s_pi:	 df.s	 [pi$]
+;s_180:	df.s	 180.0
+;d_pi:	 df.d	 [pi$]
+;d_180:	df.d	 180.0
+decimal:	data
+	dc.b	"Hi"
+	ds.b	128
+vp:	ds.h	1
+result:	ds.l	2	*space for a double
+ix:	dc.h	0	*start processing string from char 0
+	align
+s_pi:	df.s	[pi$]
+s_180:	df.s	180.0
+d_pi:	df.d	[pi$]
+d_180:	df.d	180.0
+
+
+	global	fant_to_single,fant_to_double
+	global	fant_to_double_sin,fant_to_single_sin
+;	extern_data	s_pi,s_180,d_pi,d_180

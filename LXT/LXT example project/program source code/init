@@ -1,0 +1,31 @@
+****************************************************
+*An example project showing how to use LXT
+*REQUIRES FANTASM 5.1 and LXT
+*Auth: SB
+*Date: 220198
+****************************************************
+*This program does nothing, but gives you the basics of how to use
+*LXT
+*Create a window, Print "hi" and quit when mouse button pressed
+initialize:
+	public	initialize
+**Init the Mac
+	lea	qdglob(pc),a0	quick draw work space
+	lea	202(a0),a0	add 202 to a0 quickly
+	OSInitGraf	a0
+	OSInitFonts
+	qmove.l	#-1,d0
+	qmove.l	#-1,d1
+	OSFlushEvents	d0,d1
+	OSInitWindows
+	OSInitMenus
+	clr.l	d0		   *resume proc
+	OSInitDialogs	d0
+	OSTEInit
+	OSInitCursor
+	clr.l	my_window(a5)	*So we can check in main if we got a window
+	rts_	"Initialise"
+	
+**Data	
+	align	4
+qdglob:	ds.b	210

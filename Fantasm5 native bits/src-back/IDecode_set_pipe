@@ -1,0 +1,144 @@
+	include	r2d2_IDecode_set_pipe.def
+*******************************************************************************
+*Project:                                                                     *
+*Author:        Stu                                                           *
+*Filename:      IDecode_set_pipe                                              *
+*Version:                                                                     *
+*Date started:  13:00:35 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+**r3=fields word, r4=instruction
+IDecode_set_int_pipe:
+	section
+	find_insert_record	r20
+	mr	r21,r3	*save fields record
+**DO RT
+	andi.	r3,r3,pipe_DS
+	beq	.no_DS
+**Extract 6 to 10 from inst
+	extrwi	r5,r4,5,6
+	stw	r5,pipeR_regT(r20)
+.no_DS:
+
+**DO RA
+	mr	r3,r21
+	andi.	r3,r3,pipe_A
+	beq	.no_A
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,11
+	stw	r5,pipeR_regA(r20)
+.no_A:		
+
+**DO RB
+	mr	r3,r21
+	andi.	r3,r3,pipe_B
+	beq	.no_B
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,16
+	stw	r5,pipeR_regB(r20)
+.no_B:
+
+**DO RC
+	mr	r3,r21
+	andi.	r3,r3,pipe_C
+	beq	.no_C
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,21
+	stw	r5,pipeR_regC(r20)
+.no_C:		
+	blr
+
+IDecode_set_float_pipe:
+	section
+	mr	r21,r3	*save fields record
+**DO RT
+	andi.	r3,r3,pipe_DS
+	beq	.no_DS
+**Extract 6 to 10 from inst
+	extrwi	r5,r4,5,6
+	addi	r5,r5,32
+	stw	r5,pipeR_regT(r20)
+.no_DS:
+
+**DO RA
+	mr	r3,r21
+	andi.	r3,r3,pipe_A
+	beq	.no_A
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,11
+	addi	r5,r5,32
+	stw	r5,pipeR_regA(r20)
+.no_A:		
+
+**DO RB
+	mr	r3,r21
+	andi.	r3,r3,pipe_B
+	beq	.no_B
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,16
+	addi	r5,r5,32
+	stw	r5,pipeR_regB(r20)
+.no_B:
+
+**DO RC
+	mr	r3,r21
+	andi.	r3,r3,pipe_C
+	beq	.no_C
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,21
+	addi	r5,r5,32	*floats are 32->
+	stw	r5,pipeR_regC(r20)
+.no_C:		
+	blr
+	
+IDecode_set_float_pipe_fii:	
+**Extract 6 to 10 from inst
+	extrwi	r5,r4,5,6
+	addi	r5,r5,32
+	stw	r5,pipeR_regT(r20)
+
+**DO RA
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,11
+	stw	r5,pipeR_regA(r20)
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,16
+	stw	r5,pipeR_regB(r20)
+	blr	
+	global	IDecode_set_float_pipe_fii
+**ROB!
+**We set RT=-2 and put the two cr fields we could be waiting on in ra and rb
+three_crs:
+	section
+**DO RT
+	extrwi	r5,r4,5,6
+	li	r5,-2
+	stw	r5,pipeR_regT(r20)
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,11
+	srwi	r5,r5,2	*div 4 gives field
+	stw	r5,pipeR_regA(r20)		
+**Extract 11 to 15 from inst
+	extrwi	r5,r4,5,16
+	srwi	r5,r5,2
+	stw	r5,pipeR_regB(r20)	
+**Set class
+	li	r5,4
+	stw	r5,pipeR_instr_class(r20)	
+	
+	blr
+two_ops_reversed:
+**DO RT
+**Extract 11 to 15 from inst (RA)
+	extrwi	r5,r4,5,11
+	stw	r5,pipeR_regT(r20)
+**Extract 6 to 10 from inst (RS) into RA
+	extrwi	r5,r4,5,6
+	stw	r5,pipeR_regA(r20)
+
+	blr
+	global	two_ops_reversed	
+	global	three_crs
+	global	IDecode_set_int_pipe,IDecode_set_float_pipe

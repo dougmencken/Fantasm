@@ -1,0 +1,882 @@
+*************************************************************************
+*Project: LXT                                                           *
+*************************************************************************
+*Author: SB                                                             *
+
+*Date:   July 03                                                        *
+
+*Needs: Fantasm >5.10a2                                                 *
+*Changes:                                                               *
+*v1.05 - corrects st to set the byte to all 1's                         *
+*v1.06 - 1.10 - optimzed versions
+*v2.00 - better code gen and debugging writ/reade address checking version
+*        (This will slow run time down dramatically but is very effective) 
+*v3.00 - Carbon dev version                                             *             
+*                                                                       *
+*************************************************************************
+*This file is part of Lightsoft's Cross Translation (LXT) set.          *
+*Please ensure all LXT files you are using are the same version!        *
+*See LSA0500 for usage instructions.                                    *
+*                                                                       *
+*LXT is a technology for translating from one language to another using *
+*macros                                                                 *
+*                                                                       *
+* LXT is distributed under the GNU General Public License. Please       *
+* see the file COPYING for more details                                 *
+*************************************************************************
+*Use this file when generating PPC code. Place it in your globincs project area
+*after speed_extensions, but before you're normal global includes. 
+
+***********Enable for PPC
+	proc_ppc	*Enable these two lines for PPC
+	macs_first	*over-ride instructions with macros
+***********
+	size_68k	*tell assembler that sizes are for 68K - that ds.l is 4 bytes not 8
+				*ignored if assembler is 68k
+	glob_is_rs	*globoff to rs translation ON - translate a5 globs to BSS globs
+	
+**Some internal LXT to PPC Consts
+always:	equ	0	*Used with until_ne if we always want to loop
+
+							*Ensure this size is divisible by 4.
+**Register mapping:
+**d0, d1, d2, d3, d4, d5, d6, d7   a0, a1, a2, a3, a4, a5,  a6, sp
+**r3, r4, r5,r13,r14,r15,r16,r17  r20 r21 r22 r23 r24  r25 r26  r1
+													 
+
+**************************************************************************
+have_imported_tables:	set	0	*Set to 1 when we extern_data to the BCD run time libs
+
+
+*Programmer MUST call LXT_Init if target is PPC as soon as execution starts
+LXT_Init:	macro
+**Start_up
+	macs_last
+	mflr	r0		* Get link register
+	stmw	r10,-88(sp)	**save r10-31
+	stwu	sp,-64+88(sp)	* skip over the stack space where the caller
+	lwz	r25,(RTOC)	*load global data (bss) pointer into LXT's a5
+	stwu	r0,-4(sp)	*in case user prog terms by rts
+**align BSS
+;	li	r29,8
+;	mr	r28,r30			*copy bss pointer
+;	andi.	r28,r28,%111		*mask lower 3 bits <8
+;	sub	r29,r29,r28		*sub from 8
+;	add	r30,r30,r29		*and make aligned
+	macs_first
+	endm
+*Temporary registers used by code gen
+*r18,19,28 - stack
+*r11,12,9 - temp regs
+**BIG NOTE - Do not branch out of translation unit and then pop something off the
+**Stack. This optimization assumes the stack will remain balanced with a translation 
+**unit
+
+
+zero:	reg	r27	*For clears. We can't load this up permanently because in callbacks it's sometimes trashed.
+temp_reg1:	reg	r11
+temp_reg2:	reg	r12
+temp_reg3::	reg	r9
+
+
+*******************************************************************
+illegal:	macro	*defines an illegal instruction for the target ISA
+		stdx	r1,r2,r3
+		endm
+
+**Xcall import_name
+**eg Xcall SysBeep
+**In-line glue code to exported functions, including system calls for MacOS(tm).
+**Can be assumed to destroy lr,ctr,r3-12
+**Modded 16Nov97 - stack frame created before call and removed after
+
+Xcall:	macro
+	ifnd	\1
+	import	\1
+	endif	
+
+	macs_last
+**Stack frame - we need 24 for linkage and 88 for up to 22 int params
+	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
+						; ref: IM PPC System SW 1-47
+						; 112=keep octal aligned
+
+*set up params
+	lwz	r12,\1(rtoc)	*load transition vector
+	stw	R2,20(sp)	*save my RTOC
+	lwz	r0,0(r12) 	*get callee address
+	mtctr	r0		*prepare branch
+	lwz	R2,4(r12)	*set callee RTOC
+	bctrl			*bsr to callee
+	lwz	r2,20(sp)	*get my toc back
+**Tear down stack frame
+	addi	sp,sp,112
+	macs_first
+	endm
+
+***********************************
+**	movei	rx,data
+**32 bit move into a register - PowerPC helper macro
+movei:	macro
+	ifne	narg-2
+[x$]	str$	narg
+	fail	"Wanted 2 params, got [x$]!"
+	endif
+[x$]	bin$	\2	*32 bit binary string
+[y$]	left$	[x$],17	*get hi order 16 bits
+[z$]	right$	[x$],16
+	lis	\1,[y$]	*generate the code - high order 16 bits
+	ifnc		"[z$]","0000000000000000"
+	ori	\1,\1,%[z$]	*low order 16 bits
+	endif
+	endm
+	
+
+
+* ---------- LOCAL VARIABLE SUPPORT MACROS ----------------rev0.3.5
+*These are the 68K ones as LXT is translating from 68K to PPC
+
+
+; LVSF=local variables stack frame counter
+
+LockLVSF	set	0			; error checking!!!
+
+LVSFCounter	set	0
+	
+set2		MACRO
+\1		set	\2
+		ENDM
+
+; reset_locals
+;			
+reset_locals:	MACRO
+		IF	LockLVSF
+			fail	"Cannot reset_locals after sub_entry without sub_exit first"
+		ENDIF
+		
+LVSFCounter		SET	0
+		ENDM
+
+
+; 	local[.size]	variable_name[,number_of_bytes/words/longwords]
+;
+; No "size" means size defined in default word size (68K=2bytes, PPC=4bytes)
+; No "number of X" means one only
+;
+local:	MACRO
+		IF	LockLVSF
+			fail	"Cannot add local after sub_entry without sub_exit first"
+		ENDIF
+		
+		IFEQ	NARG
+			fail	"Macro 'local' requires at least the variable_name as an operand"
+		ENDIF
+			
+		IFEQ NARG-2						; two parameters
+				
+			IFC	"\0","b"
+			set2	SpareLVSFCounter,-\2
+			ENDC
+			IFC	"\0","B"
+			set2	SpareLVSFCounter,-\2
+			ENDC
+
+
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+
+
+
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+				
+
+			IFC	"\0",""
+				set2	SpareLVSFCounter,-(2*\2)		  ; define words in 68K
+			ENDC
+		ELSE						; one parameter
+			IFC	"\0","b"
+			set2	SpareLVSFCounter,-1
+			ENDC
+			IFC	"\0","B"
+			set2	SpareLVSFCounter,-1
+			ENDC
+
+
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-2
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-2
+				ENDC
+
+
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-4
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-4
+				ENDC
+
+
+			IFC	"\0",""
+					set2	SpareLVSFCounter,-2		  ; define words in 68K
+			ENDC				
+		ENDC	; end of one or two parameters
+
+		set2	LVSFCounter,LVSFCounter+SpareLVSFCounter
+\1		set		LVSFCounter
+		ENDM
+
+**Simple link locals onto stack macro. Aligns to 4.
+**Needs a link register in \1
+reserve_locals:	macro
+fsize:	set	LVSFCounter/4
+fsize:	set	(fsize-1)*4
+	link	\1,#fsize
+	endm
+
+; In 68K:-
+; sub_entry	frame_pointer
+;
+; In PPC:-
+; sub_entry
+;
+; NOTE: You do not need to use 'sub_in' and 'sub_out', they are included in the macros.
+;
+sub_entry:	MACRO
+		IF	LockLVSF
+			fail	"Cannot sub_entry twice! - need sub_exit"
+		ENDIF
+		IFGE	LVSFCounter
+			fail "No locals to create in sub_entry!?"
+		ENDIF
+		IFLE	LVSFCounter+32768
+			fail	"Frame size too big when trying to create locals"
+		ENDC
+
+				
+			IFNE	NARG-1
+				fail	"Macro sub_entry (68K) expects the frame pointer register as a parameter"
+			ENDC
+			link \1,#LVSFCounter
+		set2	LockLVSF,1
+	
+		
+			ENDM				
+
+
+; In 68K:-
+; sub_exit		frame_pointer
+;
+; In PPC:-
+; sub_exit
+;
+sub_exit:	MACRO
+				IFEQ LockLVSF
+					fail	"Cannot sub_exit before sub_entry"
+				ENDC
+		
+					IFNE NARG-1
+						fail	"Macro sub_exit (68K) expects the frame pointer register as a parameter"
+					ENDIF
+					unlk \1
+					rts
+
+
+				set2	LockLVSF,0
+				reset_locals
+		ENDM
+
+
+* ---------- end of LOCAL VARIABLE SUPPORT MACROS ----------------
+save_all:	macro	*must be used in callbacks etc
+	macs_last
+	stmw	r3,-132(sp)	**save r3-31
+	subi	sp,sp,132
+	macs_first
+	endm
+
+save_all_nd0:	macro	*must be used in callbacks etc
+	macs_last
+	stmw	r4,-128(sp)	**save r4-31
+	subi	sp,sp,128
+	macs_first
+	endm
+	
+restore_all:	macro
+	macs_last
+	addi	sp,sp,132	* Reset the stack pointer
+	lmw	r3,-132(sp)	**restore r3-31
+	macs_first
+	endm
+
+restore_all_nd0:	macro
+	macs_last
+	addi	sp,sp,128	* Reset the stack pointer
+	lmw	r4,-128(sp)	**restore r4-31
+	macs_first
+	endm
+
+**161098
+save_volatile:	macro
+**d0, d1, d2, d3, d4, d5, d6, d7   a0, a1, a2, a3, a4, a5,  a6, sp
+**r3, r4, r5,r11,r12,r13,r14,r15  r20 r21 r22 r23 r24  r25 r26  r1
+	macs_last
+	stw	r3,-4(sp)	*d0	4
+	stw	r4,-8(sp)	*d1	8
+	stw	r5,-12(sp)	*d2	12
+	stw	r20,-16(sp)	*a0
+	stw	r21,-20(sp)	*a1
+	stw	r22,-24(sp)	*a2
+	subi	sp,sp,24
+	macs_first
+	endm
+	
+restore_volatile:	macro
+	macs_last
+	lwz	r22,(sp)
+	lwz	r21,4(sp)
+	lwz	r20,8(sp)
+	lwz	r5,12(sp)
+	lwz	r4,16(sp)
+	lwz	r3,20(sp)
+	addi	sp,sp,24
+	macs_first
+	endm
+**	
+
+
+push:	macro
+	if	PPC
+	qmove.l	\1,-(sp)
+	else
+	qmove.l	\1,-(sp)
+	endif
+	endm
+pop:	macro
+	if	PPC
+	move.l	(sp)+,\1
+	else
+	move.l	(sp)+,\1
+	endif
+	endm
+	
+popq:	macro
+	if	PPC
+	qmove.l	(sp)+,\1
+	else
+	move.l	(sp)+,\1
+	endif
+	endm
+
+inc:	macro
+	if	PPC
+	add.\0	#1,\1
+	else
+	addq.\0	#1,\1
+	endif
+	endm
+dec:	macro
+	if	PPC
+	sub.\0	#1,\1
+	else
+	subq.\0	#1,\1
+	endif
+	endm
+
+***************************************************************************
+*68K to PPC LXT cross assembler
+***************************************************************************
+
+**********************************Submacros
+**Addressing modes defined as
+**-1=not known
+**0=Dn
+**1=An
+**2=(An)
+**3=(An)+
+**4=-(An)
+**9=x(pc)
+*11=#x
+*255=register list for movem (special case - list must be separated by slashes, dashes
+*are not allowed by LXT
+
+mode_dn:	equ	0
+mode_an:	equ	1
+mode_an_ind:	equ	2
+mode_an_ind_post:	equ	3
+mode_an_pre:	equ	4
+mode_pc:	equ	9
+mode_immediate:	equ	11
+mode_movem:	equ	666	*We don't emulate the full syntax - just rn/rn/rn etc. rn-rn is not allowed.
+mode_illegal:	equ	-1
+
+;********************************************************
+;*This macro replaced with teh FAntasm directive fndc
+;*Searches param 2 for param 1. Returns char_pos=position
+;*else -1
+;str_search:	MACRO	 
+;
+;str_pos:	 set	0
+;stop:	 set	0	 *internal to search
+;str_end:	 len	\2
+;;[c$]:	str$	 \1
+;	 	 	 repeat
+;[x$]:	 	 	 mid$	 \2,str_pos,1
+;x:	asc$	 [x$]
+;	 	 	 	 ifeq	 x-\1
+;stop:	 	 	 	 set	-1
+;
+;	 	 	 	 break
+;	 	 	 	 endif
+;
+;**If we haven't stopped, inc char pointer and check for end of string	 	 	 	 
+;	 	 	 	 ifne	 stop+1
+;str_pos:	 	 	 set	str_pos+1
+;
+;	 	 	 	 	 ifeq	 str_end-str_pos
+;stop:	 	 	 	 	 set	-1
+;str_pos:	 	 	 	 set	-1
+;	 	 	 	 	 endif
+;	 	 	 	 endif
+;	 	 	 until_ne	 stop
+;	 ENDM	 *of str_search
+**********************************************************
+**Get_mode takes an operand and returns an addressing mode in the_mode
+**and a register (if appropriate) in reg_temp
+**registers defined thus:
+**d0 d1 d2 d3 d4 d5 d6 d7 a0 a1 a2 a3 a4 a5 a6 a7
+** 0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15
+**needs operand in \1
+
+get_mode: MACRO	*one parameter - the operand string
+**init some variables
+;stop:	set	0	*if true, we compare no more
+reg_temp:	set	-1	*the resultant register if used
+the_mode:	set	mode_illegal	*the resultant mode
+[e$]:	equ$	0	*this is our displacement string if used - e.g. fred(a0)
+sl:	len	\1	*length of operand
+*********Here we go...
+**REGISTER?
+**is it a register which can be d0-d7,a0-a7 or sp
+**Check for sp first
+[f$]:	left$	\1,1	*first character of operand
+		ifeq	2-sl	*lengh of mode 0 must be two characters
+				ifc	"sp","\1"
+the_mode:			set	mode_an
+reg_temp:			set	15
+				break
+				endif	*check for sp
+**try for data register
+				ifc	"[f$]","d"
+the_mode:			set	mode_dn
+[a$]:				mid$	\1,1,1	*get register number
+reg_1:				asc$	[a$]
+reg_temp:			set	reg_1-48	*make real number
+				break		*no need to check further cause we know its 2 chars
+				endif	
+
+**try for address register
+				ifc	"[f$]","a"
+the_mode:			set	mode_an
+[a$]:				mid$	\1,1,1	*get register number
+reg_1:				asc$	[a$]
+reg_temp:			set	(reg_1-48)+8
+				break	*no need to check further cause we know its just 2 chars
+				endif
+		endif	*check for an
+		*end of len = 2, so lets examine further...
+
+**IMMEDIATE MODE?
+		ifc	"#","[f$]"
+the_mode:	set	mode_immediate
+**calculate length of identifier as sl-1
+[i$]:		right$	\1,sl-1
+
+		break
+		endif	*end of immediate
+
+**AN_INDIRECT/pre/post inc with displacement?
+**lets try for offset(an)
+str_pos:		fndc	\1,"(" 
+;			str_search	0x28,\1	*Find the open bracket
+			ifge	str_pos	*if not found, str_pos will be -ve
+**Check for a - character before open bracket
+intermediate:	set	str_pos-1	*because we can't pass -ve params to mid$ we need to check
+[o$]:	equ$	0	*Used when determining if an indirect addressing mode is pre_dec
+				ifge	intermediate
+[o$]:				mid$	\1,intermediate,1
+				endif
+**it must be one of an, pc or sp
+**we dont currently support x(An,dn) as a src addressing mode (fine for dest)
+*so we're looking for (an) or (sp) or (pc)
+**if we had a thrid parameter then..
+				ifeq	have_index_reg
+[a$]:				mid$	\1,str_pos+3,1
+					ifnc		"[A$]",")"
+						fail	"Close brackets expected after an,sp, or pc"
+					endif
+				endif
+**now we can have post increment, which means the last char may be a "+"
+**Check for a,s or p at str_pos+1
+str_pos:		set	str_pos+1	*saves recalculates - point to a,s or p
+disp_pos:		set	str_pos-1	*skip in fornt of "(" char
+[d$]:			mid$	\1,str_pos,1	*get character - a,s or p hopefully
+					
+					ifc	"a","[d$]"	*address reg as base
+the_mode:				set	mode_an_ind
+**Check for post inc mode - e.g. (a0)+
+;length:					len	\1
+;length:	set	sl
+[Z$]:					mid$	\1,sl-1,1	*Followed by a plus? (was length-1)
+						ifc	"+","[Z$]"
+the_mode:					set	mode_an_ind_post	*yup
+						endif
+**Check for pre dec mode - e.g. -(a3)
+**if o$="-" then it's pre_dec
+
+						ifc	"-","[o$]"
+the_mode:					set	mode_an_pre
+disp_pos:					set	str_pos-2	*skip in font of "-" char
+						endif
+						 
+**Check for a displacement string - fred(pc) for ex.
+**str_pos is currently pointing at the a after the open brackets
+**so if we subtract 2 and the result is >0 then we have a displacement identifer
+**we can copy to d$ with left$
+*Get displacement identifier
+						ifgt	disp_pos
+[e$]:						left$	\1,disp_pos
+						endif
+
+**Get address register number
+[K$]:					mid$	\1,str_pos+1,1	*get register number
+reg_1:					asc$	[K$]
+reg_temp:				set	(reg_1-48)+8
+						break
+					endif	*ifc "a"
+		
+**Special case for sp
+					ifc	"s","[d$]"	*sp as base reg possibly
+
+[J$]:					mid$	\1,str_pos+1,1	*get character -  p hopefully
+			
+							ifc	"p","[J$]"	*deff sp?
+reg_temp:				 set	15			*Set reg to a7
+the_mode:				 set	mode_an_ind
+						ifgt	disp_pos
+[e$]:						left$	\1,disp_pos
+						endif
+
+**Check for post inc mode - e.g. (sp)+
+length_sp:				len	\1
+[Z$]:					mid$	\1,length_sp-1,1	*Followed by a plus?
+						ifc	"+","[Z$]"
+the_mode:					set	mode_an_ind_post	*yup
+						break	*we can break cause it cant be post AND pre
+						endif
+**Check for pre dec mode - e.g. -(sp)
+**if o$="-" then it's pre_dec
+						ifc	"-","[o$]"
+the_mode:					set	mode_an_pre
+						break
+						endif
+
+					endif
+					endif	*ifc "s"
+		
+					ifc	"p","[d$]"	*pc as base reg possibly
+[J$]:					mid$	\1,str_pos+1,1	*get character - a,s or p hopefully
+						ifc	"c","[J$]"	*deff pc?
+the_mode:					set	mode_pc
+						ifgt	disp_pos
+[e$]:						left$	\1,disp_pos
+**Check for fred+x(pc)	which we do not handle in this version
+check::						fndc	[e$],"+"
+							ifge	check
+								fail	"Bad LXT PC relative addressing mode - don't like fred+x(pc)"
+							endif
+						endif
+						break	*lets not process 4 endifs
+						endif
+					break
+					endif	*ifc	"p"
+			break
+			endif	*end of ge	str_pos
+	fail	"Unknown mode/register. Only lower case accepted; d0 for example" 
+	ENDM	*END OF getmode.
+***********************************************************************
+**Register mapping:
+**d0, d1, d2, d3, d4, d5, d6, d7   a0, a1, a2, a3, a4, a5,  a6, sp
+**r3, r4, r5,r11,r12,r13,r14,r15  r20 r21 r22 r23 r24  r25  r26 r1
+*
+
+check_op_3:	macro	*Check for destination index register	- takes one param 
+**Check for third parameter
+	ifc	"","\1"
+have_index_reg:	set	0
+	else
+**Calculate u$ (index register) and set index_size
+**param3 looks like this
+*dn.s)
+[a$]:		left$	\1,1
+			ifnc	"[a$]","d"
+				fail	"Only data regs for index registers please."
+			break
+			endif
+**calc u$ (register index number)
+[a$]:		mid$	\1,1,1	*get register number
+reg_1:		asc$	[a$]
+reg_temp:	set	reg_1-48	*make real number
+			map_reg	reg_temp
+[u$]:			equ$	[t$]
+**now calc index_size
+find_dot:	fndc	\1,"."	*search for the dot
+			ifge	find_dot
+[a$]:			mid$	\1,find_dot+1,1	*get size char
+**Save current inst_size
+fred:		set	inst_size
+			set_size	[a$]	*retunrs 0,1,or 2 depending on b,w or l - defaults to word
+index_size:	set	inst_size
+**restore curernt inst size
+inst_size:	set	fred
+
+**Finally, character after the size MUST be a ) cause we dont support scaling factors
+[a$]:		mid$	\1,find_dot+2,1
+			ifnc	"[a$]",")"
+			fail	"Scaling factors not supported by LXT"
+			endif
+have_index_reg:	set	1
+
+			endif
+	
+	endif	*OF have_index_reg
+	endm	*of ckeck_op_3
+
+get_ops:	MACRO	*two params - src op, dest op
+	check_op_3	\3	*Check for detination index register	
+	get_mode	\1
+mode_1:	set	the_mode
+reg_src:	set	reg_temp
+[p$]:	equ$	[e$]
+	get_mode	\2
+mode_2:	set	the_mode
+reg_dest:	set	reg_temp
+[q$]:	equ$	[e$]
+	ENDM	*getmode
+
+get_op1:	MACRO	*two params - src op, dest op
+	get_mode	\1
+mode_1:	set	the_mode
+reg_src:	set	reg_temp
+[p$]:	equ$	[e$]
+	ENDM	*getmode
+
+**Register mapping:
+** 0   1   2   3   4   5   6   7    8   9  10  11  12  13   14  15
+**d0, d1, d2, d3, d4, d5, d6, d7   a0, a1, a2, a3, a4, a5,  a6, sp
+**r3, r4, r5,r13,r14,r15,r16,r17  r20 r21 r22 r23 r24  r25  r26 r1
+*													   
+map_reg:	MACRO	*in=register number 0-15,out=t$
+	ifeq	\1+1
+	break
+	endif	*if reg=not set then out - for ex. immediate data
+	ifeq	0-\1	*d0
+[t$]:	equ$	r3
+	break
+	endif
+	ifeq	13-\1	*a5
+[t$]:	equ$	r25
+	break
+	endif
+	ifeq	1-\1	*d1
+[t$]:	equ$	r4
+	break
+	endif
+	ifeq	8-\1	*a0
+[t$]:	equ$	r20
+	break	
+	endif
+	ifeq	15-\1	*a7
+[t$]:	equ$	r1
+	break
+	endif
+	ifeq	2-\1	*d2
+[t$]:	equ$	r5
+	break
+	endif
+	ifeq	9-\1	*a1
+[t$]:	equ$	r21
+	break
+	endif
+	ifeq	10-\1	*a2
+[t$]:	equ$	r22
+	break
+	endif
+	ifeq	12-\1	*a4
+[t$]:	equ$	r24
+	break
+	endif
+	ifeq	3-\1	*d3
+[t$]:	equ$	r13
+	break
+	endif
+	ifeq	4-\1	*d4
+[t$]:	equ$	r14
+	break
+	endif
+	ifeq	7-\1	*d7
+[t$]:	equ$	r17
+	break
+	endif
+	ifeq	6-\1	*d6
+[t$]:	equ$	r16
+	break
+	endif
+	ifeq	5-\1	*d5
+[t$]:	equ$	r15
+	break
+	endif
+	ifeq	11-\1	*a3
+[t$]:	equ$	r23
+	break
+	endif		
+	ifeq	14-\1	*a6
+[t$]:	equ$	r26
+	break
+	endif
+
+	ENDM	of map_reg
+	
+map_regs:	MACRO	*translate reg_1 to r$ and same for reg_2 as s$
+	map_reg	reg_src
+[r$]:	equ$ [t$]
+	map_reg	reg_dest
+[s$]:	equ$	[t$]
+	
+	ENDM
+
+************************************	
+code_reg:	MACRO	*takes a register identifier such as d0 in parm1 and returns 
+**the ppc equiv
+;stop:	set	0
+*in t$
+**Handles dn,an,sp - DOES NOT HANDLE PC
+*get first char
+[f$]:	left$	\1,1	
+*try for data reg
+		ifc	"[f$]","d"
+[a$]:		mid$	\1,1,1	*get register number
+reg_1:		asc$	[a$]
+reg_temp:	set	reg_1-48	*make real number
+			map_reg	reg_temp
+		break
+		endif
+**try for address reg
+		ifc	"[f$]","a"
+[a$]:		mid$	\1,1,1	*get register number
+reg_1:		asc$	[a$]
+reg_temp:	set	(reg_1-48)+8
+			map_reg	reg_temp
+			break
+		endif
+*try for sp
+	ifc	"\1","sp"
+[t$]:	equ$	r1
+	else
+	fail	"Unknown register in code_reg"
+	endif
+	ENDM	*code reg	
+*************************************
+
+set_size:	MACRO	*takes size char
+	ifc	"l","\1"
+inst_size:	set	2
+	break
+	endif
+	ifc	"w","\1"
+inst_size:	set	1
+	break
+	endif
+	ifc	"b","\1"
+inst_size:	set	0
+	break
+	endif
+inst_size:	set	1	*default to half
+	ENDM	*set_size
+	
+**mr_size takes care of inter register moves of 16 and 8 bit sizes
+mr_16_testtot:	macro
+		rlwimi.	\1,\2,0,16,31
+	endm
+mr_16:	macro
+		cmpwi	\2,0
+		rlwimi	\1,\2,0,16,31
+	endm
+mrc_16:	macro
+		clrlwi	\1,\2,16
+	endm
+mrc_8:	macro
+		clrlwi	\1,\2,24
+	endm
+
+mr_8:	macro
+		cmpwi	\2,0
+		rlwimi	\1,\2,0,24,31
+
+	endm
+
+**ND's are no dot forms - no flag setting
+mr_16_nd:	macro
+		rlwimi	\1,\2,0,16,31
+	endm
+mr_8_nd:	macro
+		rlwimi	\1,\2,0,24,31
+
+	endm
+
+
+**either do an li or a movei depending on size of data
+**TWo macros - one does temp_reg1, one does the reg in [s$]
+**If data is in the range +32760/-32760 then do an li else movei
+**Works with the global string var [i$]
+**An example of how to create an IF (x AND y) ELSE ENDIF construct using break. 
+load_tr1_i:	macro
+	ifle	([i$])-32760	*>=32000?
+	ifge	([i$])+32760	*>=-32000?
+			li	`temp_reg1,[i$]	*yes, do it with li
+			break	*Exit macro
+	endif
+	endif
+		movei	`temp_reg1,[i$]	*No, do it with a movei
+	endm
+
+load_tr2_i:	macro
+	ifle	([i$])-32760	*>=32000?
+	ifge	([i$])+32760	*>=-32000?
+			li	`temp_reg2,[i$]	*yes, do it with li
+			break	*Exit macro
+	endif
+	endif
+		movei	`temp_reg2,[i$]	*No, do it with a movei
+	endm
+
+**Gen best code to get immediate data into reg held in the internal str variable [s$]	 
+load_s_i:	macro
+	ifle	([i$])-32760	*>=32000?
+	ifge	([i$])+32760	*>=-32000?
+			li	[s$],[i$]	*yes, do it with li
+			break	*Exit macro
+	endif
+	endif
+		movei	[s$],[i$]	*No, do it with a movei
+	endm

@@ -1,0 +1,16 @@
+*******************************************************************************
+*Project:       Fantasm5(r2d2)                                                *
+*Author:        Rob'n'Stu                                                     *
+*Filename:      r2d2_global_equates                                           *
+*Version:                                                                     *
+*Date started:  12:34:26 on 22nd August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+bss:	reg	r25	*was r30 in 5.1!!!!!!!FUCK!!!!!!
+**prefs_flags:
+warn_low:	equ	2	*branches only
+warn_medium:	equ	3	*
+warn_hot:	equ	4
+

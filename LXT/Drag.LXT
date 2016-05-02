@@ -1,0 +1,380 @@
+**Drag.lxt
+**Drag Manager definitions for LXT
+flavorSenderOnly			equ 0x00000001					* flavor is available to sender only
+flavorSenderTranslated		equ 0x00000002					* flavor is translated by sender 
+flavorNotSaved				equ 0x00000004					* flavor should not be saved 
+flavorSystemTranslated		equ 0x00000100					* flavor is translated by system
+
+dragTrackingEnterHandler	equ 1							* drag has entered handler 
+dragTrackingEnterWindow		equ 2							* drag has entered window 
+dragTrackingInWindow		equ 3							* drag is moving within window 
+dragTrackingLeaveWindow		equ 4							* drag has exited window 
+dragTrackingLeaveHandler	equ 5		  	  	  	  	  	  	* drag has exited handler 
+
+dragRegionBegin				equ 1							* initialize drawing
+dragRegionDraw				equ 2							* draw drag feedback
+dragRegionHide				equ 3							* hide drag feedback
+dragRegionIdle				equ 4							* drag feedback idle time
+dragRegionEnd				equ 5		  	  	  	  	  	  	  * end of drawing 
+
+OSInstallTrackingHandler:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	qmoveq	#1,d0
+	dc.w	$abed
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	InstallTrackingHandler
+	map_out	\4
+	endif
+	endm
+
+OSInstallReceiveHandler:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	qmoveq	#2,d0
+	dc.w	$abed
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	InstallReceiveHandler
+	map_out	\4
+	endif
+	endm
+
+OSShowDragHilite:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.l	\2,-(sp)	*region
+	move.b	\3,-(sp)	*inside/outside
+	qmoveq	#0x1e,d0
+	dc.w	$abed	*showdraghilite
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	ShowDragHilite
+	map_out	\4
+	endif
+	endm
+
+OSGetFlavorFlags:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.l	\2,-(sp)	*item
+	move.l	\3,-(sp)	*flavor
+	move.l	\4,-(sp)	*ptr to flags storage
+	qmoveq	#0x12,d0
+	dc.w	$abed	*getflavorflags
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	GetFlavorFlags
+	map_out	\5
+	endif
+	endm
+
+OSGetFlavorDataSize:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.l	\2,-(sp)	*item
+	move.l	\3,-(sp)	*flavour
+	move.l	\4,-(sp)	*ptr to size storage
+	qmoveq	#0x13,d0
+	dc.w	$abed	*getflavordatasize
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	GetFlavorDataSize
+	map_out	\5
+	endif
+	endm
+
+OSGetFlavorData:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.l	\2,-(sp)	*item
+	move.l	\3,-(sp)	*flavour
+	move.l	\4,-(sp)	*ptr to size storage
+	move.l	\5,-(sp)	*the size
+	move.l	\6,-(sp)	*offset
+	qmoveq	#0x14,d0
+	dc.w	$abed	*getflavordata
+	trashv
+	move.w	(sp)+,\7
+	else
+	map_in_6	\1,\2,\3,\4,\5,\6
+	Xcall	GetFlavorData
+	map_out	\7
+	endif
+	endm
+
+
+OSGetDragItemReferenceNumber:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.w	\2,-(sp)	*index
+	move.l	\3,-(sp)	*ptr to where reference to go (int32)
+	qmoveq	#0xf,d0
+	dc.w	$abed	*getdragitemreferencenumber
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetDragItemReferenceNumber
+	map_out	\4
+	endif
+	endm
+
+
+OSHideDragHilite:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	qmoveq	#0x1f,d0
+	dc.w	$abed	*showdraghilite
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	HideDragHilite
+	map_out	\2
+	endif
+	endm
+
+OSCountDragItems:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.l	\2,-(sp)	*int16 - number of items
+	qmoveq	#0xe,d0
+	dc.w	$abed	*showdraghilite
+	trashv
+	move.w	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	CountDragItems
+	map_out	\3
+	endif
+	endm
+
+OSWaitMouseMoved:	macro
+	if 68k
+	clr.b	-(sp)
+	move.l	\1,-(sp)	*point in global coords of mouse
+	qmoveq	#0x23,d0
+	dc.w	$abed	*waitmousemoved
+	trashv
+	move.b	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	WaitMouseMoved
+	map_out	\2
+	endif
+	endm
+
+OSNewDrag:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*pointer to where drag reference (int32) is to go
+	qmoveq	#0x5,d0
+	dc.w	$abed	*newdrag
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	NewDrag
+	map_out	\2
+	endif
+	endm
+
+OSDisposeDrag:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*pointer to where drag reference (int32) is to go
+	qmoveq	#0x6,d0
+	dc.w	$abed	*disposedrag
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	DisposeDrag
+	map_out	\2
+	endif
+	endm
+
+OSTrackDrag:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.l	\2,-(sp)	*ptr to event record that initiated the drag
+	move.l	\3,-(sp)	*rgn handle off outline of item(s) being dragged
+	qmoveq	#0xd,d0
+	dc.w	$abed	*track drag
+	trashv
+	move.w	(sp)+,\4	*error, -128=user cancelled
+	else
+	map_in_3	\1,\2,\3
+	Xcall	TrackDrag
+	map_out	\4
+	endif
+	endm
+
+OSDragPreScroll:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.w	\2,-(sp)	*dh
+	move.w	\3,-(sp)	*dv
+	qmoveq	#0x20,d0
+	dc.w	$abed	*drag dispatch
+	trashv
+	move.w	(sp)+,\4	*error, -128=user cancelled
+	else
+	map_in_3	\1,\2,\3
+	Xcall	DragPreScroll
+	map_out	\4
+	endif
+	endm
+
+OSDragPostScroll:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	moveq	#0x21,d0
+	dc.w	$abed	*drag dispatch
+	trashv
+	move.w	(sp)+,\2	*error, -128=user cancelled
+	else
+	map_in_1	\1
+	Xcall	DragPostScroll
+	map_out	\2
+	endif
+	endm
+
+OSAddDragItemFlavor:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*theDrag
+	move.l	\2,-(sp)	*item reference
+	move.l	\3,-(sp)	*flavor type
+	move.l	\4,-(sp)	*data ptr
+	move.l	\5,-(sp)	*data size
+	move.l	\6,-(sp)	*flavorflags (uint32)
+	qmoveq	#0x7,d0
+	dc.w	$abed	*adddragitemfalvor
+	trashv
+	move.w	(sp)+,\7	*error, -128=user cancelled
+	else
+	map_in_6	\1,\2,\3,\4,\5,\6
+	Xcall	AddDragItemFlavor
+	map_out	\7
+	endif
+	endm
+
+
+OSGetCPixel:	macro
+	if	68k
+	move.w	\1,-(sp)	*h
+	move.w	\2,-(sp)	*y
+	move.l	\3,-(sp)	*addr of where rgb value to go
+	dc.w	0xaa17
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetCPixel
+	endif
+	endm
+
+OSCopyRgn:		macro		; region handle, region handle (dest)
+	 
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	$a8dc
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	CopyRgn
+	endif
+	 		* back to translate mode
+	endm
+
+OSInvalRgn:		macro		; region handle, region handle (dest)
+	 
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	$a927
+	trashv
+	else
+	map_in_1	\1
+	Xcall	InvalRgn
+	endif
+	 		* back to translate mode
+	endm
+
+OSOffsetRgn:		macro		; region handle, region handle (dest)
+	 
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	dc.w	$a8e0
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	OffsetRgn
+	endif
+	 		* back to translate mode
+	endm
+
+OSInsetRgn:		macro		; region handle, region handle (dest)
+	 
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	dc.w	$a8e1
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	InsetRgn
+	endif
+	 		* back to translate mode
+	endm
+
+OSIconSuiteToRgn:	macro	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*rgn
+	move.l	\2,-(sp)	*rect
+	move.w	\3,-(sp)	*align
+	move.l	\4,-(Sp)	*icon_h
+	move.w	#0x714,d0
+	dc.w	_IconDispatch
+	trashv
+	move.w	(sp)+,\5	*return
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	IconSuiteToRgn
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	endm
+

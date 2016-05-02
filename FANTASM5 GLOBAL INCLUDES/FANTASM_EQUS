@@ -1,0 +1,225 @@
+registered:	equ	1	set to 1 for reg version
+use_labels:	equ	0	set to 0 for no labels in code
+
+powerf:	equ	1	**set to 1 for powerfantasm
+**ppc types
+gpr:	equ	0
+fpr:	equ	1
+crx:	equ	2
+number:	equ	3
+
+**macro defs
+macro_depth_limit:	equ	24	macro nesting level
+parameter_size:	equ	140	size allowed for 1 parameter
+number_of_parameters:	equ	10
+max_number_of_libs:	equ	100
+macro_ctr_size:	equ	16000		*bytes for macro text
+
+currentdirstore:	equ	$398	current directory
+apple_men_num:	equ	128	resource number of apple menu
+proj_men_num:	equ	131
+assm_opt_num:	equ	132
+assm_num:	equ	133
+proj_num:	equ	129	project menu
+
+initcursor:	equ	$a850
+initport:	equ	$a86d
+initgraf:	equ	$a86e
+initfonts:	equ	$a8fe
+initwindows:	equ	$a912
+initmenus:	equ	$a930
+initdialogs:	equ	$a97b
+initresources:	equ	$a995
+teinit:	equ	$a9cc
+flushevents:	equ	$a032
+text_mode:	equ	$a889
+getappparms:	equ	$a9f5
+
+**memory
+maxmem:	equ	$a11d
+hlock:	equ	$a029
+hunlock:	equ	$a02a
+
+sethandlesize:	equ	$a024
+maxapplzone:	equ	$a063
+newhandleclear:	equ	$a322
+newhandlesysclear:	equ	$a722
+dispose_ptr:	equ	$a01f
+ptrtohand:	equ	$a9e3
+new_ptr:	equ	$a11e
+newptrclear:	equ	$a21e
+disposehandle:	equ	$a023
+exittoshell:	equ	$a9f4
+
+sysbeep:	equ	$a9c8
+textfont:	equ	$a887
+textsize:	equ	$a88a
+textface:	equ	$a888
+
+getfontinfo:	equ	$a88b
+moveto:	equ	$a893
+closewindow:	equ	$a92d
+setport:	equ	$a873
+getport:	equ	$a874
+beginupdate:	equ	$a922
+endupdate:	equ	$a923
+drawchar:	equ	$a883
+drawstring:	equ	$a884
+drawtext:	equ	$a885
+setrect:	equ	$a8a7
+scrollrect:	equ	$a8ef
+eraserect:	equ	$a8a3
+invalrect:	equ	$a928
+
+getnextevent:	equ	$a970
+menukey:	equ	$a93e
+menuselect:	equ	$a93d
+hilitemenu:	equ	$a938
+
+newmenu:	equ	$a931
+appendmenu:	equ	$a933
+insertmenu:	equ	$a935
+drawmenubar:	equ	$a937
+invalmenubar:	equ	$a81d
+addresmenu:	equ	$a94d
+getmenu:	equ	$a9bf
+menucheck:	equ	$a945
+menu_enable:	equ	$a939
+menu_disable:	equ	$a93a
+
+ptinrect:	equ	$a8ad
+insetrect:	equ	$a8a9
+tenew:	equ	$a9d2
+tekey:	equ	$a9dc
+tecut:	equ	$a9d6
+tecopy:	equ	$a9d5
+tedelete:	equ	$a9d7
+tepaste:	equ	$a9db
+tesetselect:	equ	$a9d1
+teidle:	equ	$a9da
+teclick:	equ	$a9d4
+globaltolocal:	equ	$a871
+teactivate:	equ	$a9d8
+tedeactivate:	equ	$a9d9
+teupdate:	equ	$a9d3
+
+open:	equ 	$a000
+read:	equ 	$a002
+close:	equ 	$a001
+get_eof:	equ	$a011
+write:	equ 	$a003
+set_eof:	equ 	$a012
+get_info:	equ 	$a00c
+set_info:	equ 	$a00d
+flush:	equ 	$a013
+pbgetcatinfosync:	equ	$a260	with 9 in d0
+create:	equ 	$a008
+delete:	equ	$a009
+setvol:	equ	$a015
+
+**dialogs
+getditem:	equ	$a98d
+setditem:	equ	$a98e
+hideditem:	equ	$a827
+showditem:	equ	$a828
+selitext:	equ	$a97e
+getitext:	equ	$a990
+setitext:	equ	$a98f
+findditem:	equ	$a984
+
+findfolder:	equ	$a823
+createresfile:	equ	$a9b1
+openresfile:	equ	$a997
+useresfile:	equ	$a998
+closeresfile:	equ	$a99a
+getresource:	equ	$a9a0
+rmveresource:	equ	$a9ad
+writeresource:	equ	$a9b0
+detachresource:	equ	$a992
+changedresource:	equ	$a9aa
+updateresfile:	equ	$a999
+releaseresource:	equ	$a9a3
+curresfile:	equ	$a994
+get1namedresource:	equ	$a820
+get1resource:	equ	$a81f
+addresource:	equ	$a9ab
+removeresource:	equ	$a9ad
+
+newwindow:	equ	$a913
+disposewindow:	equ	$a914
+hidewindow:	equ	$a916
+sizewindow:	equ	$a91d
+bringtofront:	equ	$a920
+getnewwindow:	equ	$a9bd
+findwindow:	equ	$a92c
+selectwindow:	equ	$a91f
+newcontrol:	equ	$a954
+findcontrol:	equ	$a96c
+trackcontrol:	equ	$a968
+movecontrol:	equ	$a959
+sizecontrol:	equ	$a95c
+validrect:	equ	$a92a
+setctlvalue:	equ	$a963
+getctlvalue:	equ	$a960
+getctlmax:	equ	$a962
+setctlmax:	equ	$a965
+stilldown:	equ	$a973
+getmouse:	equ	$a972
+testcontrol:	equ	$a966
+hilitecontrol:	equ	$a95d
+tescroll:	equ	$a9dd
+tecaltext:	equ	$a9d0
+drawcontrols:	equ	$a969
+tedispose:	equ	$a9cd
+getwtitle:	equ	$a919
+debugger:	equ	$a9ff
+systemtask:	equ	$a9b4
+opendeskacc:	equ	$a9b6
+getitem:	equ	$a946
+alert:	equ	$a985
+tickcount:	equ	$a975
+
+sndplay:	equ	$a805
+
+pack3:	equ	$a9ea
+readdatetime:	equ	$a039
+devicelist:	equ	$08a8	the address of devicelist
+hwpriv:	equ	$a198
+gdpmap_offset:	equ	22	pixel map offset in devicelist
+
+about:	equ	128
+welcome:	equ	129	title alert res id
+welcome8:	equ	135	title alert 8 bit
+too_big:	equ	131	file too big alert id
+f_error:	equ	132	file error alert id
+ask_save:	equ	2000	save the file?
+ask_goto:	equ	200	goto line number?
+**alert numbers - file alerts go 1000->
+open_other:	equ	1006	unkown error on open
+create_error:	equ	1001	error creating file
+create2_error:	equ	1002	error openning after create
+size_alert:	equ	1003	file too big to fit
+open_general:	equ	1004	general error open
+
+**sysvars
+curdirstore:	equ	$398	.l
+
+**resource alerts go 5000->
+pref_locked:	equ	5000	file locked!
+res_error:	equ	5010	fatal res error
+no_res_error:	equ	5011	cant find resources
+
+eol:	equ	13
+f_heap_size:	equ	160000	heap for edit and picts etc
+reg_names:	equ	32*1000	space for 1000 names on sysheap
+
+***char constants
+cr:	equ	13
+tab:	equ	9
+
+****xcoff stuff
+number_of_imports:	equ	2000
+number_of_code_pointers:	equ	2000
+data_buffer_size:	equ	64000
+max_long_labels_count:	equ	2000
+max_number_of_data_offsets:	equ	2000

@@ -1,0 +1,330 @@
+*************************************************************************
+*Project: LXT                                                           *
+*************************************************************************
+*Author: SB                                                             *
+
+*Date:   July 03                                                        *
+
+*Needs: Fantasm >5.10a2                                                 *
+*Changes:                                                               *
+*v1.05 - corrects st to set the byte to all 1's                         *
+*v1.06 - 1.10 - optimzed versions
+*v2.00 - better code gen and debugging writ/reade address checking version
+*        (This will slow run time down dramatically but is very effective) 
+*v3.00 - Carbon dev version                                             *             
+*                                                                       *
+*************************************************************************
+*This file is part of Lightsoft's Cross Translation (LXT) set.          *
+*Please ensure all LXT files you are using are the same version!        *
+*See LSA0500 for usage instructions.                                    *
+*                                                                       *
+*LXT is a technology for translating from one language to another using *
+*macros                                                                 *
+*                                                                       *
+* LXT is distributed under the GNU General Public License. Please       *
+* see the file COPYING for more details                                 *
+*************************************************************************
+*Use this file when generating 68K code. Place it in your globincs project area
+*after speed_extensions, but before you're normal global includes. 
+*This file requires that mac_traps.def is also a globinc.
+
+***********Enable for 68K
+	macs_last	*Enable for 68K
+***********
+
+
+***********
+	size_68k	*tell assembler that sizes are for 68K - that ds.l is 4 bytes not 8
+				*ignored if assembler is 68k
+**Some internal LXT Consts
+always:	equ	0	*Used with until_ne if we always want to loop
+
+
+**************************************************************************
+have_imported_tables:	set	0	*Set to 1 when we extern_data
+code_gen_init:	MACRO	*called from LXT_Init
+stack_reg_1_in_use:	set	0
+stack_reg_2_in_use:	set	0
+stack_reg_3_in_use:	set	0
+
+				ENDM	*of code_gen_init
+*Temporary registers used by code gen
+*r18,19,28 - stack
+*r11,12,9 - temp regs
+**BIG NOTE - Do not branch out of translation unit and then pop something off the
+**Stack. This optimization assumes the stack will remain balanced with a translation 
+**unit 
+stack_reg1:	reg	r18
+stack_reg2:	reg	r19
+stack_reg3:	reg	r28
+
+
+zero:	reg	r27	*For quick clears
+temp_reg1:	reg	r11
+temp_reg2:	reg	r12
+temp_reg3::	reg	r9
+
+				
+**Use this macro to replace a call to the 68K library a5_init
+**User may need to alter a5 size - see above - largest possible a5 world is 32K.
+LXT_A5_init:	macro
+	macs_last
+LXT_Globals_Init\@:	movei	r3,A5_size	
+	Xcall	NewPtrClear	*get a5 world
+	macs_last
+	addi	r3,r3,A5_size	*move a5 to top
+	mr	r25,r3			*and store in emulated a5 register
+	global	LXT_Globals_Init\@
+	macs_first
+	endm
+*******************************************************************
+
+
+
+
+* ---------- LOCAL VARIABLE SUPPORT MACROS ----------------rev0.3.5
+
+; note: 68K sub-set only!
+
+
+; LVSF=local variables stack frame counter
+
+LockLVSF	set	0			; error checking!!!
+
+LVSFCounter	set	0
+	
+set2		MACRO
+\1		set	\2
+		ENDM
+
+; reset_locals
+;			
+reset_locals:	MACRO
+		IF	LockLVSF
+			fail	"Cannot reset_locals after sub_entry without sub_exit first"
+		ENDIF
+		
+LVSFCounter		SET	0
+		ENDM
+
+
+; 	local[.size]	variable_name[,number_of_bytes/words/longwords]
+;
+; No "size" means size defined in default word size (68K=2bytes, PPC=4bytes)
+; No "number of X" means one only
+;
+local:	MACRO
+		IF	LockLVSF
+			fail	"Cannot add local after sub_entry without sub_exit first"
+		ENDIF
+		
+		IFEQ	NARG
+			fail	"Macro 'local' requires at least the variable_name as an operand"
+		ENDIF
+			
+		IFEQ NARG-2						; two parameters
+				
+			IFC	"\0","b"
+			set2	SpareLVSFCounter,-\2
+			ENDC
+			IFC	"\0","B"
+			set2	SpareLVSFCounter,-\2
+			ENDC
+
+
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+
+
+
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+				
+
+			IFC	"\0",""
+				set2	SpareLVSFCounter,-(2*\2)		  ; define words in 68K
+			ENDC
+		ELSE						; one parameter
+			IFC	"\0","b"
+			set2	SpareLVSFCounter,-1
+			ENDC
+			IFC	"\0","B"
+			set2	SpareLVSFCounter,-1
+			ENDC
+
+
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-2
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-2
+				ENDC
+
+
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-4
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-4
+				ENDC
+
+
+			IFC	"\0",""
+					set2	SpareLVSFCounter,-2		  ; define words in 68K
+			ENDC				
+		ENDC	; end of one or two parameters
+
+		set2	LVSFCounter,LVSFCounter+SpareLVSFCounter
+\1		set		LVSFCounter
+		ENDM
+
+**Simple link locals onto stack macro. Aligns to 4.
+**Needs a link register in \1
+reserve_locals:	macro
+fsize:	set	LVSFCounter/4
+fsize:	set	(fsize-1)*4
+	link	\1,#fsize
+	endm
+
+; In 68K:-
+; sub_entry	frame_pointer
+;
+; In PPC:-
+; sub_entry
+;
+; NOTE: You do not need to use 'sub_in' and 'sub_out', they are included in the macros.
+;
+sub_entry:	MACRO
+		IF	LockLVSF
+			fail	"Cannot sub_entry twice! - need sub_exit"
+		ENDIF
+		IFGE	LVSFCounter
+			fail "No locals to create in sub_entry!?"
+		ENDIF
+		IFLE	LVSFCounter+32768
+			fail	"Frame size too big when trying to create locals"
+		ENDC
+
+				
+			IFNE	NARG-1
+				fail	"Macro sub_entry (68K) expects the frame pointer register as a parameter"
+			ENDC
+			link \1,#LVSFCounter
+		set2	LockLVSF,1
+	
+		
+			ENDM				
+
+
+; In 68K:-
+; sub_exit		frame_pointer
+;
+; In PPC:-
+; sub_exit
+;
+sub_exit:	MACRO
+				IFEQ LockLVSF
+					fail	"Cannot sub_exit before sub_entry"
+				ENDC
+		
+					IFNE NARG-1
+						fail	"Macro sub_exit (68K) expects the frame pointer register as a parameter"
+					ENDIF
+					unlk \1
+					rts
+
+
+				set2	LockLVSF,0
+				reset_locals
+		ENDM
+
+
+* ---------- end of LOCAL VARIABLE SUPPORT MACROS ----------------
+save_all:	macro
+	MOVEM.L	D0-D7/A0-A6,-(SP)
+	endm
+
+save_all_nd0:	macro
+	MOVEM.L	D1-D7/A0-A6,-(SP)
+	endm	
+restore_all:	macro
+	MOVEM.L	(SP)+,D0-D7/A0-A6
+	endm
+
+restore_all_nd0:	macro
+	MOVEM.L	(SP)+,D1-D7/A0-A6
+	endm
+**161098
+save_volatile:	macro
+	MOVEM.L	D0-D2/A0-A2,-(SP)
+	endm
+	
+restore_volatile:	macro
+
+	MOVEM.L	(SP)+,D0-D2/A0-A2
+
+	endm
+**	
+
+push:	macro
+	if	PPC
+	qmove.l	\1,-(sp)
+	else
+	qmove.l	\1,-(sp)
+	endif
+	endm
+pop:	macro
+	if	PPC
+	move.l	(sp)+,\1
+	else
+	move.l	(sp)+,\1
+	endif
+	endm
+
+inc:	macro
+	if	PPC
+	add.\0	#1,\1
+	else
+	addq.\0	#1,\1
+	endif
+	endm
+dec:	macro
+	if	PPC
+	sub.\0	#1,\1
+	else
+	subq.\0	#1,\1
+	endif
+	endm
+
+**RTS_ is a macro that will perform an rts and define a Macsbug label for 68K code and call
+**rts for PPC code
+macsbug_labels:	equ	1	*Set to 1 to define labels on rts
+rts_:	macro
+		if	68k
+			ifeq	macsbug_labels
+			rts
+			else
+			rts
+			dc.b	$80+end\@-start\@
+start\@:	dc.b	\1
+end\@:	
+			even
+			dc.w	0	*literals
+			endif
+		endif
+		
+		if ppc
+		rts
+		endif
+		endm
+rts44:	macro
+	rts
+	endm

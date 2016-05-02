@@ -1,0 +1,186 @@
+	include	r2d2_support_macros
+	include	r2d2_IDecode_set_pipe.def
+*******************************************************************************
+*Project:                                                                     *
+*Author:        Stu                                                           *
+*Filename:      r2d2_primary decode p55-p63                                   *
+*Version:                                                                     *
+*Date started:  12:04:30 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+
+	macs_last
+p_55:
+	sub_in
+	bl	float_two_store	*stfdu
+	extern	float_two_store
+	sub_out
+	global	p_55
+p_58:
+	sub_in
+**All three secondary extensions decode the same way!
+	bl	two_load	
+	extern	two_load
+	sub_out
+	global	p_58
+	
+p_59:
+	sub_in
+	lwz	r4,the_instruction(`bss)
+	extrwi	r5,r4,5,26	*extension in 26-30
+	cmpwi	r5,18	*Work out which regs we need - STALL!
+	beq	decode_fab
+	cmpwi	r5,20
+	beq	decode_fab
+	cmpwi	r5,21
+	beq	decode_fab
+	cmpwi	r5,22
+	beq	decode_fb
+	cmpwi	r5,24
+	beq	decode_fb
+	cmpwi	r5,25
+	beq	decode_fac
+	cmpwi	r5,28
+	beq	decode_fabc
+	cmpwi	r5,29
+	beq	decode_fabc
+	cmpwi	r5,30
+	beq	decode_fabc
+	cmpwi	r5,31
+	beq	decode_fabc
+	section
+**little_decode_routine
+decode_fab:
+
+	li	r3,pipe_DS+pipe_A+pipe_B
+	b	got_fregs
+decode_fa:
+	li	r3,pipe_DS
+	b	got_fregs
+decode_fb:
+	li	r3,pipe_DS+pipe_B
+	b	got_fregs
+decode_fac:
+	li	r3,pipe_DS+pipe_A+pipe_C
+	b	got_fregs
+decode_fabc:
+	li	r3,pipe_DS+pipe_A+pipe_B+pipe_C	
+got_fregs:
+	bl	IDecode_set_float_pipe
+	extern	IDecode_set_float_pipe
+**check dot
+	lwz	r4,the_instruction(`bss)
+	andi.	r4,r4,1
+	beq	.no_dot
+	li	r5,1	*cr field 1
+	stw	r5,pipeR_tocc(r20)
+.no_dot:
+	li	r5,float_class
+	stw	r5,pipeR_instr_class(r20)
+
+	sub_out
+	global	p_59,decode_fab,decode_fa,decode_fb,decode_fac,decode_fabc,got_fregs
+	
+p_62:
+	sub_in
+**Both secondaries are the same
+	bl	store_two
+	extern	store_two
+	sub_out
+	global	p_62
+
+p_63:
+	sub_in
+;	Debug
+	lwz	r4,the_instruction(`bss)
+	extrwi	r5,r4,5,26	*extension in 26-30
+	cmpwi	r5,0	*Work out which regs we need - STALL!
+	beq	decode_fcompAB_noT
+	cmpwi	r5,12
+	beq	decode_fb
+	cmpwi	r5,14	fctiw
+	beq	decode_fb
+	cmpwi	r5,15
+	beq	decode_fb
+	cmpwi	r5,18
+	beq	decode_fab	fdiv
+	cmpwi	r5,20
+	beq	decode_fab
+	cmpwi	r5,21
+	beq	decode_fab	fab (not)
+	cmpwi	r5,22
+	beq	decode_fb	sqrt
+	cmpwi	r5,23
+	beq	decode_fabc	fsel
+	cmpwi	r5,25
+	beq	decode_fac	fmul
+	cmpwi	r5,26
+	beq	decode_fb	sqrte
+	cmpwi	r5,28
+	beq	decode_fabc	fmsub
+	cmpwi	r5,29
+	beq	decode_fabc	fmadd
+	cmpwi	r5,30
+	beq	decode_fabc	fnmsub
+	cmpwi	r5,29
+	beq	decode_fabc	fnmadd
+**IF not found ,then it must be an extended secondary
+	nop	*Stu debug place holder
+	lwz	r4,the_instruction(`bss)
+	extrwi	r5,r4,10,21	*extension in 21-30
+;	cmpwi	r5,32
+;	beq	decode_fcompAB_noT	fcmpo - will have been picked up by fcompu
+	cmpwi	r5,38	mtfsb1
+	beq	just_dot
+	cmpwi	r5,40	fneg
+	beq	decode_fb
+**ignore 64 and 70
+	cmpwi	r5,72
+	beq	decode_fb	fmr
+**ignore 134
+	cmpwi	r5,136
+	beq	decode_fb	*fnabs
+	cmpwi	r5,264
+	beq	decode_fb	*fabs
+	cmpwi	r5,583	*mffs
+	beq	decode_fa
+	cmpwi	r5,711
+	beq	decode_fb	*mtfsf
+	
+**814-> decoded by word routines (15) above
+	
+**ignored ops come here
+	b	just_dot
+
+
+just_dot:
+	section
+	lwz	r4,the_instruction(`bss)
+	andi.	r4,r4,1
+	beq	.no_dot
+	li	r5,1	
+	stw	r5,pipeR_tocc(r20)
+.no_dot:
+	li	r5,float_class
+	stw	r5,pipeR_instr_class(r20)
+	b	63_end
+	global	just_dot
+	
+decode_fcompAB_noT:
+	global	decode_fcompAB_noT
+**Extract a and b
+	extrwi	r5,r4,5,11
+	addi	r5,r5,32
+	stw	r5,pipeR_regT(r20)
+
+	extrwi	r5,r4,5,16
+	addi	r5,r5,32
+	stw	r5,pipeR_regT(r20)
+**extract tocc field
+	extrwi	r5,r4,3,6
+	stw	r5,pipeR_tocc(r20)
+63_end:
+	sub_out
+	global	p_63

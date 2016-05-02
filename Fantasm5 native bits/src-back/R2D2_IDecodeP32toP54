@@ -1,0 +1,124 @@
+*******************************************************************************
+*Project:                                                                     *
+*Author:        Stu                                                           *
+*Filename:      r2d2_primary decode p32-p54                                   *
+*Version:                                                                     *
+*Date started:  12:04:30 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+
+p_32:
+	sub_in
+	sub_out
+	global	p_32
+p_33:
+	sub_in
+	sub_out
+	global	p_33
+	
+p_34:
+	sub_in
+	sub_out
+	global	p_34
+	
+p_35:
+	sub_in
+	sub_out
+	global	p_35
+
+p_36:
+	sub_in
+	sub_out
+	global	p_36
+	
+p_37:
+	sub_in
+	sub_out
+	global	p_37
+
+p_38:
+	sub_in
+	sub_out
+	global	p_38
+
+p_39:
+	sub_in
+	sub_out
+	global	p_39
+	
+p_40:
+	sub_in
+	sub_out
+	global	p_40
+
+p_41:
+	sub_in
+	sub_out
+	global	p_41
+
+p_42:
+	sub_in
+	sub_out
+	global	p_42
+	
+p_43:
+	sub_in
+	sub_out
+	global	p_43
+
+p_44:
+	sub_in
+	sub_out
+	global	p_44
+p_45:
+	sub_in
+	sub_out
+	global	p_45
+	
+p_46:
+	sub_in
+	sub_out
+	global	p_46
+	
+p_47:
+	sub_in
+	sub_out
+	global	p_47
+
+p_48:
+	sub_in
+	sub_out
+	global	p_48
+	
+p_49:
+	sub_in
+	sub_out
+	global	p_49
+
+p_50:
+	sub_in
+	sub_out
+	global	p_50
+
+p_51:
+	sub_in
+	sub_out
+	global	p_51
+	
+p_52:
+	sub_in
+	sub_out
+	global	p_52
+
+p_53:
+	sub_in
+	sub_out
+	global	p_53
+
+p_54:
+	sub_in
+	sub_out
+	global	p_54
+	

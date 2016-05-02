@@ -1,0 +1,140 @@
+	include	r2d2_support_macros
+	include	r2d2_IDecode_set_pipe.def
+*******************************************************************************
+*Project:                                                                     *
+*Author:        Stu                                                           *
+*Filename:      r2d2_primary decode p18-p30                                   *
+*Version:                                                                     *
+*Date started:  12:04:30 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+
+	macs_last
+p_18:
+**Set class - branch
+	li	r5,bra_class
+	stw	r5,pipeR_instr_class(r20)
+	blr	*NFI - leave it at all -1s.
+	global	p_18
+p_19:	
+	sub_in
+	bl	decode_19
+	sub_out
+	global	p_19
+	extern	decode_19
+p_20:	*rlwimi
+	section
+	sub_in
+
+	lwz	r4,the_instruction(`bss)
+	bl	two_ops_reversed
+*check for rc bit
+	andi.	r4,r4,1
+	beq	.no_record
+	li	r5,0
+	stw	r5,pipeR_tocc(r20)	
+.no_record:
+**Set class
+	li	r5,int_class
+	stw	r5,pipeR_instr_class(r20)	
+	
+	sub_out
+	global	p_20
+	
+p_21:
+	b	p_20	*Same as 20
+;	sub_in
+	
+;	sub_out
+	global	p_21
+
+
+p_23:
+	b	p_20	*rlwnm.
+;	sub_in
+;	sub_out
+	global	p_23
+	
+p_24:
+	sub_in
+	lwz	r4,the_instruction(`bss)
+	bl	two_ops_reversed
+	li	r5,int_class
+	stw	r5,pipeR_instr_class(r20)	
+
+	sub_out
+	global	p_24
+
+p_25:
+	b	p_24	*oris
+;	sub_in
+;	sub_out
+	global	p_25
+
+p_26:
+	b	p_24
+;	sub_in
+;	sub_out
+	global	p_26
+	
+p_27:
+	b	p_24
+;	sub_in
+;	sub_out
+	global	p_27
+
+p_28:
+	b	p_24
+;	sub_in
+;	sub_out
+	global	p_28
+	
+p_29:
+	b	p_24
+;	sub_in
+;	sub_out
+	global	p_29
+
+p_30:	*64 bit rotates
+	sub_in
+	sub_out
+**these are split into 2 - those with secondary op codes less than 8 of form MD
+**And those >= 8 of form MDS
+	illegal
+	section
+	lwz	r4,the_instruction(`bss)
+	extrwi	r5,r4,10,21
+	cmpwi	r5,8
+	bge	.decode_mds
+**decode MD
+	lwz	r4,the_instruction(`bss)
+	bl	two_ops_reversed
+*check for rc bit
+	andi.	r4,r4,1
+	beq	.no_record
+	li	r5,0
+	stw	r5,pipeR_tocc(r20)	
+.no_record:	
+	li	r5,1
+	stw	r5,pipeR_instr_class(r20)	
+	sub_out
+.decode_mds:
+	lwz	r4,the_instruction(`bss)
+	bl	two_ops_reversed
+	extrwi	r5,r4,5,16
+	stw	r5,pipeR_regB(r20)
+*check for rc bit
+	andi.	r4,r4,1
+	beq	.no_record1
+	li	r5,0
+	stw	r5,pipeR_tocc(r20)	
+.no_record1:	
+	li	r5,1
+	stw	r5,pipeR_instr_class(r20)	
+	sub_out
+	
+	global	p_30
+
+	extern	IDecode_set_int_pipe,two_ops_reversed

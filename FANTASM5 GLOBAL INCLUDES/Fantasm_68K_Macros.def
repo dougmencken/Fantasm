@@ -1,0 +1,496 @@
+*************************************************************************
+*LIGHTSOFT STANDARD MACROS                                              *
+*************************************************************************
+**Bugs to lightsoft@zedworld.demon.co.uk
+**
+**Revs - 4.11 - changed Go_PPC comment - it used to say you should save r10, which is
+**not true.
+rts_:	MACRO
+	if	use_labels
+	rts
+	dc.b	$80+end\@-start\@
+start\@:	dc.b	\1
+end\@:	
+	even
+	dc.w	0	*literals
+	else
+	rts
+	align
+	endif
+	endm
+	
+**Calls mixedmode to switch from 68k to ppc. 
+**When you enter your PPC routine, you should save the contents of LR as it has
+**your return address.
+**To return from your PPC routine load LR with the return address (as above) and execute
+**a "blr" instruction, which will return you to the 68k emulator.
+**You should save and restore r0,r1,r31,lr,ctr in your routine
+**Usage:
+*	GO_PPC
+*	PROC_PPC
+*	YOUR PPC CODE
+*	BLR	*BACK TO 68K
+*Go_ppc does not support parameter passing. See IM PPC system s/w for info on how to
+*modify the universal proc pointer (at univ_pointer\@) to handle params.
+Go_PPC:	MACRO
+	PROC_68K
+	LEA	PPC_ROUTINE\@(PC),A0	*ADDRESS OF ROUTINE TO RUN
+	LEA	MY_TV\@(PC),A1
+	MOVE.L	A0,(A1)		*POINTER TO ROUTINE IN TV
+	LEA	PROC_POINTER\@(PC),A0
+	MOVE.L	A1,(A0)		*PUT TV IN HEADER
+	LEA	UNIV_POINTER\@(PC),A0
+	JSR	(A0)			*INTO MIXEDMODEMAGIC
+	RTS_	"GO_PPC_MACRO"
+	ALIGN	4	
+MY_TV\@:	DS.L	2
+
+
+***MODE SWITCH CODE TO PPC
+UNIV_POINTER\@:
+	DC.W	$AAFE		*MIXEDMODEMAGIC TRAP
+	DC.B	7		*VERSION OF MIXED MODE
+	DC.B	0		*SELECTORS (NOT USED HERE)
+	DC.L	0		*RES1
+	DC.B	0		*RES2
+	DC.B	0		*SELECTOR INFO
+	DC.W	0		*NUMBER OF ROUTINES (ARRAY INDEX!)
+**PROCINFOREC
+	DC.L	0		*PROCINFO 0=NO PARAMETERS, SEE IM PPC SYS S/W
+	DC.B	0		*RESVD
+	DC.B	1		*PPC (68K=0)
+	DC.W	4		*ROUTINE FLAGS 4=NATIVE + 2=NEEDS INIT + 1=OFFSET
+
+PROC_POINTER\@:
+	DS.L	1		*PROC POINTER (TO TRANSITION VECTOR ACTUALLY!)
+	DC.L	0		*RESVD
+	DC.L	0		*RESVD
+
+**THE PPC ROUTINE
+	ALIGN	8
+PPC_ROUTINE\@:
+	ENDM
+
+*************************************************************
+**Insert a macsbug label
+**call as rts_ "label_string"
+
+
+
+* -------------------------------
+* please note: I'm not going mad, I just need a simple life.....
+
+bnz:		MACRO
+		bne	\1
+		ENDM
+		
+bz:		MACRO
+		beq	\1
+		ENDM
+
+* -------------------------------
+
+mystack	reg	a7
+
+* -------------------------------
+PUSH:           MACRO
+                move.l  \1,-(`mystack)
+                ENDM
+* ------------------------------
+POP:            MACRO
+                move.l  (`mystack)+,\1
+                ENDM
+* -------------------------------
+POPPUSH:        MACRO
+                move.l  (`mystack),\1
+                ENDM
+
+*************************************************************
+**INC ADDS 1 TO A SELECTED REGISTER.
+**TAKES SIZE AND REGISTER FROM PARAMETERS
+INC:	MACRO
+	IFC	"","\1"
+	FAIL
+	ENDC
+	ADDq.\0	#1,\1
+	ENDM
+	
+*************************************************************
+**DEC SUBS 1 FROM A SELECTED REGISTER
+**TAKES SIZE AND REGISTER FROM PARAMETERS
+DEC:	MACRO
+	IFC	"","\1"
+	FAIL
+	ENDC
+	SUBQ.\0	#1,\1
+	ENDM
+	
+*************************************************************
+**SAVE_ALL SAVES D0-D7/A0-A6 ON STACK
+SAVE_ALL:	MACRO
+	MOVEM.L	D0-D7/A0-A6,-(SP)
+	ENDM
+
+*************************************************************
+**RESTORE_ALL GETS D0-D7/A0-A6 OFF STACK
+RESTORE_ALL:	MACRO
+	MOVEM.L	(SP)+,D0-D7/A0-A6
+	ENDM
+	
+*************************************************************
+push_a0:	macro
+	move.l	a0,-(sp)
+	endm
+*************************************************************
+pop_a0:	macro
+	move.l	(sp)+,a0
+	endm
+*************************************************************
+OSerr:	macro
+	clr.w	-(sp)
+	endm
+OSerr_ret:	macro
+	move.w	(sp)+,d0
+	endm
+*************************************************************
+;reset_locals:	 macro
+;	 globreset
+;	 endm
+;	 
+;local:	macro
+;	 ifne	 narg-2
+;	 fail	 "Number of parameters wrong"
+;	 endif
+;\1	globoff.\0	\2
+;	 endm
+*************************************************************
+* ---------- LOCAL VARIABLE SUPPORT MACROS ----------------rev0.3
+
+; note: These macros work both in powerpc and 68k!!
+
+
+; LVSF=local variables stack frame counter
+
+LockLVSF	set	0			; error checking!!!
+
+	IF PPC
+LVSFCounter	SET	-56
+	ELSE
+LVSFCounter	SET	0
+	ENDC
+	
+set2		MACRO
+\1		set	\2
+		ENDM
+
+; reset_locals
+;			
+reset_locals:	MACRO
+
+		IF	LockLVSF
+			fail	"Cannot reset_locals after sub_entry without sub_exit first"
+		ENDIF
+		
+		IF PPC
+LVSFCounter		SET	-56
+		ELSE
+LVSFCounter		SET	0
+		ENDC
+
+		ENDM
+
+
+; 	local[.size]	variable_name[,number_of_bytes/words/longwords]
+;
+; No "size" means size defined in default word size (68K=2bytes, PPC=4bytes)
+; No "number of X" means one only
+;
+local:	MACRO
+		IF	LockLVSF
+			fail	"Cannot add local after sub_entry without sub_exit first"
+		ENDIF
+		
+		IFEQ	NARG
+			fail	"Macro 'local' requires at least the variable_name as an operand"
+		ENDIF
+			
+		IFEQ NARG-2						; two parameters
+				
+			IFC	"\0","b"
+			set2	SpareLVSFCounter,-\2
+			ENDC
+			IFC	"\0","B"
+			set2	SpareLVSFCounter,-\2
+			ENDC
+
+			IF PPC
+				IFC "\0","h"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+				IFC	"\0","H"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+			ELSE
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-(2*\2)
+				ENDC
+			ENDC
+
+			IF PPC
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+			ELSE
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-(4*\2)
+				ENDC
+			ENDIF
+
+			IF PPC
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-(8*\2)
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-(8*\2)
+				ENDC
+			ENDIF				
+
+			IFC	"\0",""
+				IF	PPC
+				set2	SpareLVSFCounter,-(4*\2)		  ; define words in PPC
+				ELSE
+				set2	SpareLVSFCounter,-(2*\2)		  ; define words in 68K
+				ENDC
+			ENDC
+		ELSE						; one parameter
+			IFC	"\0","b"
+			set2	SpareLVSFCounter,-1
+			ENDC
+			IFC	"\0","B"
+			set2	SpareLVSFCounter,-1
+			ENDC
+
+			IF PPC
+				IFC "\0","h"
+				set2	SpareLVSFCounter,-2
+				ENDC
+				IFC	"\0","H"
+				set2	SpareLVSFCounter,-2
+				ENDC
+			ELSE
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-2
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-2
+				ENDC
+			ENDC
+
+			IF PPC
+				IFC	"\0","w"
+				set2	SpareLVSFCounter,-4
+				ENDC
+				IFC	"\0","W"
+				set2	SpareLVSFCounter,-4
+				ENDC
+			ELSE
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-4
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-4
+				ENDC
+			ENDIF
+
+			IF PPC
+				IFC	"\0","l"
+				set2	SpareLVSFCounter,-8
+				ENDC
+				IFC	"\0","L"
+				set2	SpareLVSFCounter,-8
+				ENDC
+			ENDIF				
+
+			IFC	"\0",""
+					IF	PPC
+					set2	SpareLVSFCounter,-4		  ; define words in PPC
+					ELSE
+					set2	SpareLVSFCounter,-2		  ; define words in 68K
+					ENDC
+			ENDC				
+		ENDC	; end of one or two parameters
+
+		IF PPC
+\1		set		0-LVSFCounter			; Fantasm cannot use unary minus with labels
+		set2	LVSFCounter,LVSFCounter+SpareLVSFCounter
+		ELSE
+		set2	LVSFCounter,LVSFCounter+SpareLVSFCounter
+\1		set		LVSFCounter
+		ENDC
+
+		ENDM
+
+
+; In 68K:-
+; sub_entry	frame_pointer
+;
+; In PPC:-
+; sub_entry
+;
+; NOTE: You do not need to use 'sub_in' and 'sub_out', they are included in the macros.
+;
+sub_entry:	MACRO
+		IF	LockLVSF
+			fail	"Cannot sub_entry twice! - need sub_exit"
+		ENDIF
+		IFGE	LVSFCounter
+			fail "No locals to create in sub_entry!?"
+		ENDIF
+		IFLE	LVSFCounter+32768
+			fail	"Frame size too big when trying to create locals"
+		ENDC
+
+				
+		IF	PPC
+
+			; ---- 8 bytes align SET -------
+			set2 SpareLVSFCounter,8*(LVSFCounter/8)
+
+			IFNE	SpareLVSFCounter-LVSFCounter
+				set2 LVSFCounter,SpareLVSFCounter-8
+			ELSE
+				set2 LVSFCounter,SpareLVSFCounter
+			ENDC
+			; --- end of 8 byte align SET -----
+
+			mflr	r0		
+			stwu	r0,-4(sp)
+			stwu	sp,LVSFCounter(sp)	; already includes 56!! (see sub_in)
+		ELSE
+			IFNE	NARG-1
+				fail	"Macro sub_entry (68K) expects the frame pointer register as a parameter"
+			ENDC
+			link \1,#LVSFCounter
+		ENDC
+		set2	LockLVSF,1
+	
+		
+			ENDM				
+
+
+; In 68K:-
+; sub_exit		frame_pointer
+;
+; In PPC:-
+; sub_exit
+;
+sub_exit:	MACRO
+				IFEQ LockLVSF
+					fail	"Cannot sub_exit before sub_entry"
+				ENDC
+		
+				IF	PPC
+					lwz	r0,-LVSFCounter(sp)
+					mtlr	r0				; taken from sub_out
+					addi	sp,sp,4-LVSFCounter
+					blr
+				ELSE
+					IFNE NARG-1
+						fail	"Macro sub_exit (68K) expects the frame pointer register as a parameter"
+					ENDIF
+					unlk \1
+					rts
+				ENDIF
+
+				set2	LockLVSF,0
+				reset_locals
+		ENDM
+
+
+* ---------- end of LOCAL VARIABLE SUPPORT MACROS ----------------
+
+
+*************************************************************
+*Dereferences a handle into a register
+*needs identifier,register
+deref:	macro
+	ifne	narg-2
+	fail	"Number of parameters wrong"
+	endif
+	move.l	\1,\2	*move.l	fred(a5),a0
+	move.l	(\2),\2
+	endm
+	
+*************************************************************
+**Do a beep
+do_sysbeep:	macro
+	move.w	#-1,-(sp)
+	dc.w	_SysBeep
+	endm
+*************************************************************
+**Sends message to log, beeps and waits for user to press a key
+press_a_key:	macro
+	ifeq	pass-1
+	clrlog
+	print	"Build number updated to [build$]."
+	gotoxy	4,24
+	print	"Press a key"
+	beep
+	pause
+	clrlog
+	endif
+	align
+	endm
+*************************************************************
+**trash volatile 68k regs - can be used after OS traps to check integrity
+**of your code on a PowerMac which seems to save most all of the 68k
+**registers during a trap.
+do_trash:	equ	false	*Set to false if not needed
+trash:	macro
+	if	do_trash
+	moveq	#-1,d0
+	move.l	d0,d1
+	move.l	d1,d2
+	move.l	d0,a0
+	move.l	d0,a1
+	move.l	d0,a2
+	endif
+	endm
+
+trash_noa0:	macro
+	if	do_trash
+	moveq	#-1,d0
+	move.l	d0,d1
+	move.l	d1,d2
+	move.l	d0,a1
+	move.l	d0,a2
+	endif
+	endm
+
+trash_no_d0:	macro
+	if	do_trash
+	moveq	#-1,d1
+	move.l	d1,d2
+	move.l	d1,a0
+	move.l	d1,a1
+	move.l	d1,a2
+	endif
+	endm
+	
+trash_no_d0a0:	macro
+	if	do_trash
+	moveq	#-1,d1
+	move.l	d1,d2
+	move.l	d1,a1
+	move.l	d1,a2
+	endif
+	endm

@@ -1,0 +1,1824 @@
+*************************************************************************
+*Project: LXT1                                                          *
+*************************************************************************
+*Popular MacOS calls as macros for 68K to PowerPC translation           *
+
+*Author: SB                                                             *
+
+*Date:   Apr 99                                                         *
+
+*Needs: Fantasm 5.1                                                     *
+
+*v1.05 - (1 Jun 98) removed qcmove for register to register             *
+*Version 2.00 Apr 99                                                    *
+
+
+*                                                                       *
+*************************************************************************
+*This file is part of Lightsoft's Cross Translation (LXT) set.          *
+*Please ensure all LXT files you are using are the same version!        *
+*See LSA0500 for usage instructions.                                    *
+*                                                                       *
+*LXT is a technology for translating from one language to another using *
+*macros                                                                 *
+*                                                                       *
+* LXT is distributed under the GNU general Public License. Please       *
+* see the file COPYING for more details                                 *
+*************************************************************************
+**LXT Speed extensions
+**!!!THIS FILE MUST BE INCLUDED BEFORE ANY OTHER LXT FILES!!!
+*Use this file when generating either PPC or 68K code. Place it in your 
+*globincs project area before any other globinc'd files. 
+
+**moves
+**Quick move - does not affect any flags
+**replace the 68K move with qmove to use.
+qmoveq:	macro
+qmflag:	set	1
+	if	68k
+	macs_last
+	moveq	\1,\2
+	macs_first
+	break
+	endif
+	
+	if PPC
+	macs_last
+	get_ops		\1,\2	*there are two operands
+	ifeq	mode_1-mode_immediate
+	ifeq	mode_2-mode_dn
+	map_reg	reg_dest
+	li	[t$],[i$]
+	macs_first
+	break
+	endif
+	endif
+	illegal
+	fail	"Bad AM in qmoveq"
+	macs_first
+	endif
+	endm
+	
+qmove:	MACRO
+	macs_last
+qmflag:	set	1	*See we can check if a qmove precedes a conditional branch
+	if	68K		*68K version
+	ifnc	"","\3"
+	move.\0	\1,\2,\3
+	else
+	move.\0	\1,\2
+	endif
+	macs_first
+	break
+	endif
+	
+	if PPC	*PPC version
+	macs_last
+	set_size	\0		*Sets the indentifier - inst_size - 0=byte,1=half,2=word
+	get_ops		\1,\2,\3	*there are two operands and possibly a third in (a0,d0.l) 	
+	map_regs	*create reg_src and reg_dest to r$ and s$	
+**	dn,x(an)	*most popular move
+	
+	ifeq	mode_1-mode_dn
+	ifeq	mode_2-mode_an_ind
+**Check index reg
+	ifne	have_index_reg
+	ifne	have_index_reg
+	mr	`temp_reg3,[s$]	*save register
+	endif
+	
+	ifeq	index_size-2
+	add	[s$],[s$],[u$]
+	endif
+	ifeq	index_size-1
+	mrc_16	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	ifeq	index_size
+	mrc_8	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	endif
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+
+		ifeq	inst_size-2	*32 bit move
+		stw	[r$],[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		sth	[r$],[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		stb	[r$],[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		endif
+		macs_first
+		break
+	endif
+	endif
+
+**	x(an),d0	*2nd next popular
+	ifeq	mode_1-mode_an_ind
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		lwz	[s$],[p$]([r$])	*s$=reg dest, r$=reg src
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lha	`temp_reg1,[p$]([r$])	*s$=reg dest, r$=reg src
+		mr_16_nd	[s$],`temp_reg1
+		macs_first
+		break
+		endif
+		ifeq	inst_size	*8 bit move
+		lbz	`temp_reg2,[p$]([r$])	*s$=reg dest, r$=reg src
+		mr_8_nd	[s$],`temp_reg2
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**	x(an),a0	*2nd next popular - note no flags tests
+	ifeq	mode_1-mode_an_ind
+	ifeq	mode_2-mode_an
+		ifeq	inst_size-2	*32 bit move
+		lwz	[s$],[p$]([r$])	*s$=reg dest, r$=reg src
+		macs_first
+		break
+		endif
+		
+		ifeq	inst_size-1	*32 bit move
+		lhz	`temp_reg1,[p$]([r$])	*s$=reg dest, r$=reg src
+		mr_16_nd	[s$],`temp_reg1
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*32 bit move
+		lbz	`temp_reg2,[p$]([r$])	*s$=reg dest, r$=reg src
+		mr_8_nd	[s$],`temp_reg2
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+
+**#x,dn
+	ifeq	mode_1-mode_immediate	*3rd most popular
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+**Interesting note: Note how we are calling load_s_i BEFORE it is loaded 
+*(lxt_speed_extensions should always be the first file in the LXT globincs list.)
+		load_s_i
+		macs_first
+		break
+		endif
+	
+		ifeq	inst_size-1	*16 bit move
+		li	`temp_reg1,[i$]
+		mr_16_nd	[s$],`temp_reg1
+		macs_first
+		break
+
+		endif
+		
+		ifeq	inst_size	*16 bit move
+		li	`temp_reg1,[i$]
+		mr_8_nd	[s$],`temp_reg1
+		macs_first
+		break
+		endif
+	endif
+	endif
+**#x,an
+	ifeq	mode_1-mode_immediate	*3rd most popular
+	ifeq	mode_2-mode_an	*note no flags tests
+		ifeq	inst_size-2	*32 bit move
+		load_s_i
+		macs_first
+		break
+		endif
+	
+		ifeq	inst_size-1	*16 bit move
+		li	`temp_reg1,[i$]
+		mr_16_nd	[s$],`temp_reg1
+		macs_first
+		break
+
+		endif
+		
+		ifeq	inst_size	*16 bit move
+		li	`temp_reg1,[i$]
+		mr_8_nd	[s$],`temp_reg1
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+
+**#x,x(an)
+	ifeq	mode_1-mode_immediate	*3rd most popular
+	ifeq	mode_2-mode_an_ind
+**Check index reg
+	ifne	have_index_reg
+		ifeq	index_size-2
+		add	`temp_reg3,[s$],[u$]
+		endif
+		ifeq	index_size-1
+		mrc_16	`temp_reg1,[u$]
+		add	`temp_reg3,[s$],`temp_reg1
+		endif
+		ifeq	index_size
+		mrc_8	`temp_reg1,[u$]
+		add	`temp_reg3,[s$],`temp_reg1
+		endif
+	endif
+
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+
+		ifeq	inst_size-2	*32 bit move
+		load_tr1_i
+		ifne	have_index_reg
+		stw	`temp_reg1,[q$](`temp_reg3)
+		else
+		stw	`temp_reg1,[q$]([s$])
+		endif
+		macs_first
+		break
+		endif
+	
+		ifeq	inst_size-1	*16 bit move
+		li	`temp_reg1,[i$]
+		ifne	have_index_reg
+		sth	`temp_reg1,[q$](`temp_reg3)
+		else
+		sth	`temp_reg1,[q$]([s$])
+		endif
+		macs_first
+		break
+
+		endif
+		
+		ifeq	inst_size	*8 bit move
+		li	`temp_reg1,[i$]
+		ifne	have_index_reg
+		stb	`temp_reg1,[q$](`temp_reg3)
+		else
+		stb	`temp_reg1,[q$]([s$])
+		endif
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**#x,x(an)+
+	ifeq	mode_1-mode_immediate	*3rd most popular
+	ifeq	mode_2-mode_an_ind_post
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		load_tr1_i
+		stw	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],4
+		macs_first
+		break
+		endif
+	
+		ifeq	inst_size-1	*16 bit move
+		li	`temp_reg1,[i$]
+		sth	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],2
+		macs_first
+		break
+
+		endif
+		
+		ifeq	inst_size	*8 bit move
+		li	`temp_reg1,[i$]
+		ifc	"r1","[s$]"
+		stw	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],4
+		else
+		stb	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],1
+		endif
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**dn,dn
+
+	ifeq	mode_1-mode_dn
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		mr	[s$],[r$]
+		macs_first
+		
+		break
+		endif
+		
+		ifeq	inst_size-1	*16 bit move
+		mr_16_nd	[s$],[r$]
+		macs_first
+		break
+		endif
+		
+		ifeq	inst_size	*8 bit move
+		mr_8_nd	[s$],[r$]
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**	x(an)+,(an)+
+	ifeq	mode_1-mode_an_ind_post
+	ifeq	mode_2-mode_an_ind_post
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+	ifeq	inst_size-2	*32 bit move
+	lwz	`temp_reg1,[p$]([r$])	*Src to temp_reg
+	stw	`temp_reg1,([s$])	*temp reg to dest
+	addi	[r$],[r$],4
+	addi	[s$],[s$],4
+	macs_first
+	break
+	endif
+	
+	ifeq	inst_size-1	*16 bit move
+	lha	`temp_reg1,[p$]([r$])	*Src to temp_reg
+	sth	`temp_reg1,([s$])	*temp reg to dest
+	addi	[r$],[r$],2
+	addi	[s$],[s$],2
+	macs_first
+	break
+	endif
+
+	ifeq	inst_size	*8 bit move
+	ifc	"r1","[r$]"
+	lwa	`temp_reg1,[p$]([r$])	*Stack is always a 16 bit move for bytes
+	addi	[r$],[r$],4
+	else
+	lbz	`temp_reg1,[p$]([r$])	*Src to temp_reg
+	addi	[r$],[r$],1
+	endif
+	ifc	"r1",""[s$]""
+	stw	`temp_reg1,([s$])	*temp reg to dest	
+	addi	[s$],[s$],4
+	else
+	stb	`temp_reg1,([s$])	*temp reg to dest	
+	addi	[s$],[s$],1
+	endif
+	macs_first
+	break
+	endif
+	endif
+	endif
+**	x(an),x(an)
+	ifeq	mode_1-mode_an_ind
+	ifeq	mode_2-mode_an_ind
+**Check dest index reg
+	ifne	have_index_reg
+;	mr	`temp_reg3,[s$]
+	ifeq	index_size-2
+	add	`temp_reg3,[s$],[u$]
+	endif
+	ifeq	index_size-1
+	mrc_16	`temp_reg1,[u$]
+	add	`temp_reg3,[s$],`temp_reg1
+	endif
+	ifeq	index_size
+	mrc_8	`temp_reg1,[u$]
+	add	`temp_reg3,[s$],`temp_reg1
+	endif
+	endif
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+	ifeq	inst_size-2	*32 bit move
+	lwz	`temp_reg1,[p$]([r$])	*Src to temp_reg
+	ifne	have_index_reg
+	stw	`temp_reg1,[q$](`temp_reg3)	*temp reg to dest
+	else
+	stw	`temp_reg1,[q$]([s$])	*temp reg to dest
+	endif
+	macs_first
+	break
+	endif
+
+	ifeq	inst_size-1	*32 bit move
+	lhz	`temp_reg1,[p$]([r$])	*Src to temp_reg
+	ifne	have_index_reg
+	sth	`temp_reg1,[q$](`temp_reg3)	*temp reg to dest
+	else
+	sth	`temp_reg1,[q$]([s$])	*temp reg to dest
+	endif
+	macs_first
+	break
+	endif
+
+	ifeq	inst_size	*32 bit move
+	lbz	`temp_reg1,[p$]([r$])	*Src to temp_reg
+	ifne	have_index_reg
+	stb	`temp_reg1,[q$](`temp_reg3)	*temp reg to dest
+	else
+	stb	`temp_reg1,[q$]([s$])	*temp reg to dest
+	endif
+	macs_first
+	break
+	endif
+	endif
+	endif
+
+
+**	dn,(an)+ 
+	ifeq	mode_1-mode_dn
+	ifeq	mode_2-mode_an_ind_post
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		stw	[r$],[q$]([s$])
+		addi	[s$],[s$],4
+		macs_first
+		break
+		endif
+		
+		ifeq	inst_size-1	*16 bit move
+		sth	[r$],[q$]([s$])
+		addi	[s$],[s$],2
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		stb	[r$],[q$]([s$])
+		addi	[s$],[s$],1
+		macs_first
+		break
+		endif
+	endif
+	endif
+**an,an
+	ifeq	mode_1-mode_an
+	ifeq	mode_2-mode_an
+		ifeq	inst_size-2	*32 bit move
+		mr	[s$],[r$]
+		endif
+		
+		ifeq	inst_size-1	*16 bit move
+		mr_16_nd	[s$],[r$]
+		endif
+
+		ifeq	inst_size	*8 bit move - illegal in 68K
+		mr_8_nd	[s$],[r$]
+		endif
+		macs_first
+	break
+	endif
+	endif
+**an,dn
+	ifeq	mode_1-mode_an
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		mr.	[s$],[r$]
+		endif
+		
+		ifeq	inst_size-1	*16 bit move
+
+		mr_16_nd	[s$],[r$]
+		endif
+
+		ifeq	inst_size	*8 bit move
+
+		mr_8_nd	[s$],[r$]
+		endif
+		macs_first
+	break
+	endif
+	endif
+**dn,an
+	ifeq	mode_1-mode_dn
+	ifeq	mode_2-mode_an
+		ifeq	inst_size-2	*32 bit move
+		mr	[s$],[r$]
+		endif
+		
+		ifeq	inst_size-1	*16 bit move
+		mr_16_nd	[s$],[r$]
+		endif
+
+		ifeq	inst_size	*8 bit move
+		mr_8_nd	[s$],[r$]
+		endif
+		macs_first
+	break
+	endif
+	endif
+
+**	x(an)+,x(an)
+	ifeq	mode_1-mode_an_ind_post	*index is zero
+	ifeq	mode_2-mode_an_ind
+**Check dest index reg
+	ifne	have_index_reg
+	mr	`temp_reg3,[s$]
+	ifeq	index_size-2
+	add	[s$],[s$],[u$]
+	endif
+	ifeq	index_size-1
+	mrc_16	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	ifeq	index_size
+	mrc_8	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	endif
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$]([r$])
+		stw	`temp_reg1,[q$]([s$])
+		addi	[r$],[r$],4
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+		
+		ifeq	inst_size-1	*16 bit move
+		lhz	`temp_reg1,[p$]([r$]))
+		sth	`temp_reg1,[q$]([s$])
+		addi	[r$],[r$],2
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+	ifc	"r1","[r$]"
+	lwz	`temp_reg1,[p$]([r$])	*Stack is always a 16 bit move for bytes
+		addi	[r$],[r$],4
+	else
+	lbz	`temp_reg1,[p$]([r$])	*Src to temp_reg
+		addi	[r$],[r$],1
+	endif
+		stb	`temp_reg1,[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**	an,x(an)
+	ifeq	mode_1-mode_an
+	ifeq	mode_2-mode_an_ind
+**Check dest index reg
+	ifne	have_index_reg
+	mr	`temp_reg3,[s$]
+	ifeq	index_size-2
+	add	[s$],[s$],[u$]
+	endif
+	ifeq	index_size-1
+	mrc_16	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	ifeq	index_size
+	mrc_8	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	endif
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		stw	[r$],[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+		
+		ifeq	inst_size-1	*16 bit move
+		sth	[r$],[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		stb	[r$],[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+	endif
+	endif
+**	x(an),-(an)
+	ifeq	mode_1-mode_an_ind
+	ifeq	mode_2-mode_an_pre
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$]([r$])
+		stwu	`temp_reg1,-4([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lhz	`temp_reg1,[p$]([r$])
+		sthu	`temp_reg1,-2([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		lbz	`temp_reg1,[p$]([r$])
+	ifc	"r1","[s$]"
+		stwu	`temp_reg1,-4([s$])
+	else
+		stbu	`temp_reg1,-1([s$])
+	endif
+		macs_first
+		break
+		endif	
+	endif
+	endif
+	
+**	(an)+,-(an)
+	ifeq	mode_1-mode_an_ind_post
+	ifeq	mode_2-mode_an_pre
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+;		subi	[s$],[s$],4
+		lwz	`temp_reg1,[p$]([r$])
+		stwu	`temp_reg1,-4([s$])
+		addi	[r$],[r$],4
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lhz	`temp_reg1,[p$]([r$])
+		sthu	`temp_reg1,-2([s$])
+		addi	[r$],[r$],2
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+	ifc	"r1","[r$]"
+		lwz	`temp_reg1,[p$]([r$])
+		addi	[r$],[r$],4
+	else
+		lbz	`temp_reg1,[p$]([r$])
+		addi	[r$],[r$],1
+	endif
+	
+	ifc	"r1","[s$]"
+		stwu	`temp_reg1,-4([s$])
+	else
+		stbu	`temp_reg1,-1([s$])
+	endif
+		macs_first
+		break
+		endif	
+	endif
+	endif
+
+**	x(an),x(an)+
+	ifeq	mode_1-mode_an_ind
+	ifeq	mode_2-mode_an_ind_post
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$]([r$])
+		stw	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],4
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lhz	`temp_reg1,[p$]([r$])
+		sth	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],2
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		lbz	`temp_reg1,[p$]([r$])
+	ifc	"r1","[s$]"
+		stw	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],4
+	else
+		stb	`temp_reg1,[q$]([s$])
+		addi	[s$],[s$],1
+	endif
+		macs_first
+		break
+		endif	
+	endif
+	endif
+
+**	an,-(an)
+	ifeq	mode_1-mode_an
+	ifeq	mode_2-mode_an_pre
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		stwu	[r$],-4([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		sthu	[r$],-2([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+	ifc	"r1","[s$]"
+		stwu	[r$],-4([s$])
+	else
+		stbu	[r$],-1([s$])
+	endif
+
+;		stbu	[r$],-1([s$])
+		macs_first
+		break
+		endif	
+	endif
+	endif
+**	dn,-(an)	
+	ifeq	mode_1-mode_dn
+	ifeq	mode_2-mode_an_pre
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		stwu	[r$],-4([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		sthu	[r$],-2([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[s$]"
+		stwu	[r$],-4([s$])
+	else
+		stbu	[r$],-1([s$])
+	endif
+		macs_first
+		break
+		endif	
+	endif
+	endif
+
+**	#,-(an)
+	ifeq	mode_1-mode_immediate
+	ifeq	mode_2-mode_an_pre
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		load_tr1_i
+		stwu	`temp_reg1,-4([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		li	`temp_reg1,[i$]
+		sthu	`temp_reg1,-2([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		li	`temp_reg1,[i$]
+	ifc	"r1","[s$]"
+		stwu	`temp_reg1,-4([s$])
+	else
+		stbu	`temp_reg1,-1([s$])
+	endif
+
+
+;		stbu	`temp_reg1,-1([s$])
+		macs_first
+		break
+		endif	
+	endif
+	endif
+
+**	-(an),-(an)
+	ifeq	mode_1-mode_an_pre
+	ifeq	mode_2-mode_an_pre
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		lwzu	`temp_reg1,-4([r$])
+		stwu	`temp_reg1,-4([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lhzu	`temp_reg1,-2([r$])
+		sthu	`temp_reg1,-2([s$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[r$]"
+		lwzu	`temp_reg1,-4([r$])
+	else
+		lbzu	`temp_reg1,-1([r$])
+	endif
+;		lbzu	`temp_reg1,-1([r$])
+	ifc	"r1","[s$]"
+		stwu	`temp_reg1,-4([s$])
+	else
+		stbu	`temp_reg1,-1([s$])
+	endif
+;		stbu	`temp_reg1,-1([s$])
+		macs_first
+		break
+		endif	
+	endif
+	endif
+
+**	an,x(an)+
+	ifeq	mode_1-mode_an
+	ifeq	mode_2-mode_an_ind_post
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		stw	[r$],[q$]([s$])
+		addi	[s$],[s$],4
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		sth	[r$],[q$]([s$])
+		addi	[s$],[s$],2
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		stb	[r$],[q$]([s$])
+		addi	[s$],[s$],1
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**	(an)+,dn
+	ifeq	mode_1-mode_an_ind_post
+	ifeq	mode_2-mode_dn
+	ifeq	inst_size-2	*32 bit move
+	lwz	[s$],[p$]([r$])
+	addi	[r$],[r$],4
+	macs_first
+	break
+	endif
+	
+	ifeq	inst_size-1	*16 bit move
+	lhz	`temp_reg1,[p$]([r$])
+	mr_16_nd	[s$],`temp_reg1
+	addi	[r$],[r$],2
+	macs_first
+	break
+	endif
+
+	ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[r$]"
+		lwz	`temp_reg2,[p$]([r$])
+	addi	[r$],[r$],4
+	else
+		lbz	`temp_reg2,[p$]([r$])
+	addi	[r$],[r$],1
+	endif
+
+
+;	lbz	`temp_reg2,([r$])
+;	addi	[r$],[r$],1
+	mr_8_nd	[s$],`temp_reg2
+	macs_first
+	break
+	endif	
+	endif
+	endif
+
+**	(an)+,an	*NOTE - no flags are set
+	ifeq	mode_1-mode_an_ind_post
+	ifeq	mode_2-mode_an
+	ifeq	inst_size-2	*32 bit move
+	lwz	[s$],[p$]([r$])
+	addi	[r$],[r$],4
+	macs_first
+	break
+	endif
+	
+	ifeq	inst_size-1	*16 bit move
+	lhz	`temp_reg1,[p$]([r$])
+	mr_16_nd	[s$],`temp_reg1
+	addi	[r$],[r$],2
+	macs_first
+	break
+	endif
+
+	ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[r$]"
+		lwz	`temp_reg2,[p$]([r$])
+	addi	[r$],[r$],4
+	else
+		lbz	`temp_reg2,[p$]([r$])
+	addi	[r$],[r$],1
+	endif
+
+
+;	lbz	`temp_reg2,([r$])
+	mr_8_nd	[s$],`temp_reg2
+;	addi	[r$],[r$],1
+	macs_first
+	break
+	endif	
+	endif
+	endif
+
+	
+**	x(pc),dn
+	ifeq	mode_1-mode_pc
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lwz	`temp_reg1,(`temp_reg1)
+		mr	[s$],`temp_reg1	*temp reg to dest
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lhz	`temp_reg1,(`temp_reg1)
+		mr_16_nd	[s$],`temp_reg1		
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lbz	`temp_reg1,(`temp_reg1)
+		mr_8_nd	[s$],`temp_reg1
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**	x(pc),an - no flags set
+	ifeq	mode_1-mode_pc
+	ifeq	mode_2-mode_an
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lwz	`temp_reg1,(`temp_reg1)
+		mr	[s$],`temp_reg1	*temp reg to dest
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lhz	`temp_reg1,(`temp_reg1)
+		mr_16_nd	[s$],`temp_reg1		
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lbz	`temp_reg1,(`temp_reg1)
+		mr_8_nd	[s$],`temp_reg1		
+		macs_first
+		break
+		endif
+	endif
+	endif
+**	-(an),dn	*
+	ifeq	mode_1-mode_an_pre
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		lwzu	[s$],-4([r$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lhzu	`temp_reg1,-2([r$])
+		mr_16_nd	[s$],`temp_reg1
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[r$]"
+		lwzu	`temp_reg1,-4([r$])
+	else
+		lbzu	`temp_reg1,-1([r$])
+	endif
+		mr_16_nd	[s$],`temp_reg1
+		macs_first
+		break
+		endif	
+	endif
+	endif
+
+**	x(pc),x(an)
+	ifeq	mode_1-mode_pc
+	ifeq	mode_2-mode_an_ind
+**Check index reg
+	ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+	ifeq	index_size-2
+	add	[s$],[s$],[u$]
+	endif
+	ifeq	index_size-1
+	mrc_16	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	ifeq	index_size
+	mrc_8	`temp_reg1,[u$]
+	add	[s$],[s$],`temp_reg1
+	endif
+	endif
+		ifne	check_writes
+		check_addr	[s$]
+		endif
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lwz	`temp_reg1,(`temp_reg1)
+		cmpwi	`temp_reg1,0
+		stw	`temp_reg1,[q$]([s$]
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+
+		lwz	`temp_reg1,[p$](rtoc)	 *Src to temp_reg
+		lhz	`temp_reg1,(`temp_reg1)
+		sth	`temp_reg1,[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		lwz	`temp_reg1,[p$](rtoc)	 *Src to temp_reg
+		lbz	`temp_reg1,(`temp_reg1)
+		stb	`temp_reg1,[q$]([s$])
+		ifne	have_index_reg
+		mr	[s$],`temp_reg3	*save register
+		endif
+		macs_first
+		break
+		endif
+	endif
+	endif
+	illegal
+	fail	"Unknown addressing modes in MOVE"	
+	endif
+	macs_first
+	endm	*moves
+************************************
+**qcmove is used when destination is a register and you dont care if all bits are affected 
+**NO flags can be assumed to be affected
+**typically replaces:
+*	clr.l	dx
+*	move.b	AM,dx
+
+qcmove:	MACRO
+	macs_last
+	if	68K		*68K version
+	clr.l	\2
+	move.\0	\1,\2
+;	macs_first
+	break
+	endif
+	
+	if PPC	*PPC version
+qmflag:	set	1
+	macs_last
+	set_size	\0		*Sets the indentifier - inst_size - 0=byte,1=half,2=word
+	get_ops		\1,\2,\3	*there are two operands and possibly a third in (a0,d0.l) 	
+	map_regs	*create reg_src and reg_dest to r$ and s$	
+
+**	x(an),d0	*2nd next popular
+	ifeq	mode_1-mode_an_ind
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		lwz	[s$],[p$]([r$])	*s$=reg dest, r$=reg src
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lhz	[s$],[p$]([r$])	*s$=reg dest, r$=reg src
+		macs_first
+		break
+		endif
+		ifeq	inst_size	*8 bit move
+		lbz	[s$],[p$]([r$])	*s$=reg dest, r$=reg src
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**	x(an),a0	*2nd next popular - note no flags tests
+	ifeq	mode_1-mode_an_ind
+	ifeq	mode_2-mode_an
+		ifeq	inst_size-2	*32 bit move
+		lwz	[s$],[p$]([r$])	*s$=reg dest, r$=reg src
+		macs_first
+		break
+		endif
+		
+		ifeq	inst_size-1	*32 bit move
+		lhz	[s$],[p$]([r$])	*s$=reg dest, r$=reg src
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*32 bit move
+		lbz	`temp_reg2,[p$]([r$])	*s$=reg dest, r$=reg src
+		mr_8_nd	[s$],`temp_reg2
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+
+**#x,dn
+	ifeq	mode_1-mode_immediate	*3rd most popular
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		load_s_i
+
+		macs_first
+		break
+		endif
+	
+		ifeq	inst_size-1	*16 bit move
+		li	[s$],[i$]
+		macs_first
+		break
+
+		endif
+		
+		ifeq	inst_size	*16 bit move
+		li	[s$],[i$]
+		macs_first
+		break
+		endif
+	endif
+	endif
+**#x,an
+	ifeq	mode_1-mode_immediate	*3rd most popular
+	ifeq	mode_2-mode_an	*note no flags tests
+		ifeq	inst_size-2	*32 bit move
+		load_s_i
+		macs_first
+		break
+		endif
+	
+		ifeq	inst_size-1	*16 bit move
+		li	[s$],[i$]
+		macs_first
+		break
+
+		endif
+		
+		ifeq	inst_size	*16 bit move
+		li	[s$],[i$]
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+
+
+;**dn,dn
+;
+;	 ifeq	 mode_1-mode_dn
+;	 ifeq	 mode_2-mode_dn
+;	 	 ifeq	 inst_size-2	*32 bit move
+;	 	 mr	[s$],[r$]
+;	 	 macs_first
+;	 	 break
+;	 	 endif
+;	 endif
+;	 endif
+;
+;**an,an
+;	 ifeq	 mode_1-mode_an
+;	 ifeq	 mode_2-mode_an
+;
+;	 	 mr	[s$],[r$]
+;	 	 macs_first
+;	 break
+;	 	 endif
+;	 endif
+;**an,dn
+;	 ifeq	 mode_1-mode_an
+;	 ifeq	 mode_2-mode_dn
+;	 	 mr.	[s$],[r$]
+;	 	 macs_first
+;	 break
+;	 endif
+;	 endif
+;**dn,an
+;	 ifeq	 mode_1-mode_dn
+;	 ifeq	 mode_2-mode_an
+;	 	 mr	[s$],[r$]
+;	 	 macs_first
+;	 break
+;	 endif
+;	 endif
+
+
+**	(an)+,dn
+	ifeq	mode_1-mode_an_ind_post
+	ifeq	mode_2-mode_dn
+	ifeq	inst_size-2	*32 bit move
+	lwz	[s$],[p$]([r$])
+	addi	[r$],[r$],4
+	macs_first
+	break
+	endif
+	
+	ifeq	inst_size-1	*16 bit move
+	lhz	[s$],[p$]([r$])
+	addi	[r$],[r$],2
+	macs_first
+	break
+	endif
+
+	ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[r$]"
+		lwz	[s$],[p$]([r$])
+	addi	[r$],[r$],4
+	else
+		lbz	[s$],[p$]([r$])
+	addi	[r$],[r$],1
+	endif
+
+	macs_first
+	break
+	endif	
+	endif
+	endif
+
+**	(an)+,an	*NOTE - no flags are set
+	ifeq	mode_1-mode_an_ind_post
+	ifeq	mode_2-mode_an
+	ifeq	inst_size-2	*32 bit move
+	lwz	[s$],[p$]([r$])
+	addi	[r$],[r$],4
+	macs_first
+	break
+	endif
+	
+	ifeq	inst_size-1	*16 bit move
+	lhz	[s$],[p$]([r$])
+	addi	[r$],[r$],2
+	macs_first
+	break
+	endif
+
+	ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[r$]"
+		lwz	[s$],[p$]([r$])
+	addi	[r$],[r$],4
+	else
+		lbz	[s$],[p$]([r$])
+	addi	[r$],[r$],1
+	endif
+
+	macs_first
+	break
+	endif	
+	endif
+	endif
+
+	
+**	x(pc),dn
+	ifeq	mode_1-mode_pc
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lwz	[s$],(`temp_reg1)
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lhz	[s$],(`temp_reg1)		
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lbz	[s$],(`temp_reg1)
+		macs_first
+		break
+		endif
+	endif
+	endif
+
+**	x(pc),an - no flags set
+	ifeq	mode_1-mode_pc
+	ifeq	mode_2-mode_an
+		ifeq	inst_size-2	*32 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lwz	[s$],(`temp_reg1)
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lhz	[s$],(`temp_reg1)		
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+		lwz	`temp_reg1,[p$](rtoc)	*Src to temp_reg
+		lbz	[s$],(`temp_reg1)		
+		macs_first
+		break
+		endif
+	endif
+	endif
+**	-(an),dn	*
+	ifeq	mode_1-mode_an_pre
+	ifeq	mode_2-mode_dn
+		ifeq	inst_size-2	*32 bit move
+		lwzu	[s$],-4([r$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size-1	*16 bit move
+		lhzu	[s$],-2([r$])
+		macs_first
+		break
+		endif
+
+		ifeq	inst_size	*8 bit move
+
+	ifc	"r1","[r$]"
+		lwzu	[s$],-4([r$])
+	else
+		lbzu	[s$],-1([r$])
+	endif
+		macs_first
+		break
+		endif	
+	endif
+	endif
+
+	illegal
+	fail	"Unknown addressing modes in QCMOVE"	
+	endif
+	macs_first
+	endm	*moves
+************************************
+**Quick dbra - all 32 bits of count reg are decremented and tested
+qdbra:	macro
+qmflag:	set	0
+
+	if	68k
+	dbra	\1,\2
+	else
+**	dbra	dn,id
+	macs_last
+	get_op1		\1	*there are two operands, return addressing modes in mode_1 &_2	
+	map_reg	reg_src
+**We loop until dn(lower16) is -1
+[r$]:	equ$ [t$]		*register string
+	cmpwi	[r$],0	*if will be -1
+	subi	[r$],[r$],1
+	bne	\2
+	macs_first
+	endif
+	endm
+
+**Can be used for leaf routines - that is routines that call no others.
+qbsr:	macro
+qmflag:	set	0
+
+	if	68k
+	bsr.\0	\1
+	else
+	bl	\1
+	endif
+	endm
+qrts:	macro
+qmflag:	set	0
+	if	68k
+	rts
+	else
+	blr
+	endif
+	endm
+**************************************
+qpush_seq:	set	0	*push/pop counter
+stack_reg_1_in_use:	set	0	*cleared as file read in as not part of a macro
+stack_reg_2_in_use:	set	0
+stack_reg_3_in_use:	set	0
+
+*r18,19,28 - stack
+stack_reg1:	reg	r18
+stack_reg2:	reg	r19
+stack_reg3:	reg	r28
+
+
+**Copy register to temporary register or stack
+**Checks you cant push to same temp twice.
+**Checks popping order to prevent nasty 68K errors.
+qpush1:	macro
+qmflag:	set	0
+	if	68k
+**68K
+		move.l	\1,-(sp)
+	else
+**PPC
+		macs_last
+		get_op1		\1	*there are two operands, return addressing modes in mode_1 &_2	
+		map_reg	reg_src
+[r$]:	equ$ [t$]		*register string
+		ifeq	stack_reg_1_in_use
+			mr	`stack_reg1,[r$]
+qpush_seq:	set	qpush_seq+1
+stack_reg_1_in_use:	set	qpush_seq
+		else
+			fail	"Stack reg. #1 is in use!!!"
+		endif
+	macs_first
+	endif	*of if 68k
+	endm
+	
+**Copy stack reg or stack to register
+qpop1:	macro
+qmflag:	set	0
+
+	if	68k
+		move.l	(sp)+,\1	
+	else
+**PPC	
+		macs_last
+		get_op1		\1	*there are two operands, return addressing modes in mode_1 &_2	
+		map_reg	reg_src
+[r$]:	equ$ [t$]		*register string
+		ifne	stack_reg_1_in_use
+**Check sequence
+			ifne	qpush_seq-stack_reg_1_in_use
+				fail	"QPopping in wrong order! (qpop1)"
+			endif
+			mr	[r$],`stack_reg1
+qpush_seq:	set	qpush_seq-1	*up one on stack
+stack_reg_1_in_use:	set	0
+		else
+			fail	"Stack reg. #1 has not been loaded!!!"
+		endif
+	macs_first
+	endif
+	endm
+
+qpush2:	macro
+qmflag:	set	0
+
+	if	68k
+**68K
+		move.l	\1,-(sp)
+	else
+**PPC
+		macs_last
+		get_op1		\1	*there are two operands, return addressing modes in mode_1 &_2	
+		map_reg	reg_src
+[r$]:	equ$ [t$]		*register string
+		ifeq	stack_reg_2_in_use
+			mr	`stack_reg2,[r$]
+qpush_seq:	set	qpush_seq+1
+stack_reg_2_in_use:	set	qpush_seq
+		else
+			fail	"Stack reg. #2 is in use!!!"
+		endif
+	macs_first
+	endif	*of if 68k
+	endm
+	
+**Copy stack reg or stack to register
+qpop2:	macro
+qmflag:	set	0
+
+	if	68k
+		move.l	(sp)+,\1	
+	else
+**PPC	
+		macs_last
+		get_op1		\1	*there are two operands, return addressing modes in mode_1 &_2	
+		map_reg	reg_src
+[r$]:	equ$ [t$]		*register string
+		ifne	stack_reg_2_in_use
+**Check sequence
+			ifne	qpush_seq-stack_reg_2_in_use
+				fail	"QPopping in wrong order! (qpop2)"
+			endif
+			mr	[r$],`stack_reg2
+qpush_seq:	set	qpush_seq-1
+stack_reg_2_in_use:	set	0
+		else
+			fail	"Stack reg. #2 has not been loaded!!!"
+		endif
+	macs_first
+	endif
+	endm
+
+qpush3:	macro
+qmflag:	set	0
+
+	if	68k
+**68K
+		move.l	\1,-(sp)
+	else
+**PPC
+		macs_last
+		get_op1		\1	*there are two operands, return addressing modes in mode_1 &_2	
+		map_reg	reg_src
+[r$]:	equ$ [t$]		*register string
+		ifeq	stack_reg_3_in_use
+			mr	`stack_reg3,[r$]
+qpush_seq:	set	qpush_seq+1
+stack_reg_3_in_use:	set	qpush_seq
+		else
+			fail	"Stack reg. #3 is in use!!!"
+		endif
+	macs_first
+	endif	*of if 68k
+	endm
+	
+**Copy stack reg or stack to register
+qpop3:	macro
+qmflag:	set	0
+
+	if	68k
+		move.l	(sp)+,\1
+	else
+**PPC	
+		macs_last
+		get_op1		\1	*there are two operands, return addressing modes in mode_1 &_2	
+		map_reg	reg_src
+[r$]:	equ$ [t$]		*register string
+		ifne	stack_reg_3_in_use
+**Check sequence
+			ifne	qpush_seq-stack_reg_3_in_use
+				fail	"QPopping in wrong order! (qpop3)"
+			endif
+qpush_seq:	set	qpush_seq-1
+			mr	[r$],`stack_reg3
+stack_reg_3_in_use:	set	0
+		else
+			fail	"Stack reg. #3 has not been loaded!!!"
+		endif
+	macs_first
+	endif
+	endm
+
+**Bit set/clr
+qbset:	macro
+	if	68k
+**68K
+		bset	\1,\2
+	else
+**PPC
+
+qmflag:	set	0
+
+
+	macs_last
+	macs_last
+	get_ops		\1,\2	*there are two operands and possibly a third in (a0,d0.l) 
+*return addressing modes in mode_1 &_2
+	map_regs	*create reg_src and reg_dest to r$ and s$			
+
+**#,x(an)
+	ifeq	mode_1-mode_immediate
+	ifeq	mode_2-mode_an_ind
+
+bit:	set	[i$]
+bitor:	set	2^bit
+	lbz	`temp_reg1,[q$]([s$])
+	ifle	bit-15
+	ori	`temp_reg1,`temp_reg1,bitor
+	else
+bitor:	set	bitor/0xffff
+	oris	`temp_reg1,`temp_reg1,bitor
+	endif
+	stb	`temp_reg1,[q$]([s$])
+	macs_first
+	break
+	endif
+	endif
+	
+**#,dn
+	ifeq	mode_1-mode_immediate
+	ifeq	mode_2-mode_dn
+
+bit:	set	[i$]
+bitor:	set	2^bit
+	ifle	bit-15
+	ori	[s$],[s$],bitor
+	else
+bitor:	set	bitor/0xffff
+	oris	[s$],[s$],bitor
+
+	endif
+	macs_first
+	break
+	endif
+	endif
+
+**dx,dy
+	ifeq	mode_1-mode_dn
+	ifeq	mode_2-mode_dn
+	mr	`temp_reg1,[r$]
+	addi 	`temp_reg2,`temp_reg1,-32 	* n - 32 
+	andc 	`temp_reg2,`temp_reg2,`temp_reg1 	* t = Ân & (n - 32) 
+	srwi	`temp_reg2,`temp_reg2,31 	* t = (unsigned) t >> 31 
+	slw 	`temp_reg1,`temp_reg2,`temp_reg1 	* pow2(n) = t << n
+	or	[s$],[s$],`temp_reg1	*set the bit (Note, no flags set!)
+	macs_first
+	break
+	endif
+	endif
+
+	illegal
+	macs_first
+	fail	"Unknown AM in qbset" 
+	macs_first
+	endif
+	endm
+
+
+qbclr:	macro
+qmflag:	set	0
+	if	68k
+**68K
+		bclr	\1,\2
+	else
+**PPC
+
+	macs_last
+	get_ops		\1,\2	*there are two operands and possibly a third in (a0,d0.l) 
+*return addressing modes in mode_1 &_2
+	map_regs	*create reg_src and reg_dest to r$ and s$			
+
+**#,x(an)
+	ifeq	mode_1-mode_immediate
+	ifeq	mode_2-mode_an_ind
+
+bit:	set	[i$]
+bit2:	set	31-bit
+	lbz	`temp_reg1,[q$]([s$])
+	ifne	bit2
+**not bit 31
+		ifne bit
+			rlwinm	`temp_reg1,`temp_reg1,0,bit2+1,bit2-1
+			else
+			rlwinm	`temp_reg1,`temp_reg1,0,0,30			; special case - bit 31 cleared
+		endif
+	else
+**clear bit 31
+	rlwinm	`temp_reg1,`temp_reg1,0,1,31				; special case - bit 0 cleared
+	endif
+
+;	li	`zero,0
+;	insrwi	`temp_reg1,`zero,1,31-bit
+	stb	`temp_reg1,[q$]([s$])
+	macs_first
+	break
+	endif
+	endif
+	
+**#,dn
+	ifeq	mode_1-mode_immediate
+	ifeq	mode_2-mode_dn
+bit:	set	[i$]
+bit2:	set	31-bit
+
+	ifne	bit2
+**not bit 31
+		ifne bit
+			rlwinm	[s$],[s$],0,bit2+1,bit2-1
+			else
+			rlwinm	[s$],[s$],0,0,30			; special case - bit 31 cleared
+		endif
+	else
+**clear bit 31
+	rlwinm	[s$],[s$],0,1,31				; special case - bit 0 cleared
+	endif
+	
+**old code	
+;	li	`zero,0
+;	insrwi	[s$],`zero,1,31-bit
+	macs_first
+	break
+	endif
+	endif
+
+	macs_first
+	illegal
+	macs_first
+	fail	"Unknown AM in qbclr" 
+	endif	*of 68K
+	endm

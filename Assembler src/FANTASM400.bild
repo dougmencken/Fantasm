@@ -1,0 +1,178 @@
+*********************************
+*FANTASM PROJECT FILE - 281094			            *
+*****************************************************************************
+*********************************************************************
+*MODULE:	FANTASM BUILD FILE		    *
+*DATE:	281094			    *
+*LAST MODIFIED:	011095			    *
+*PROGRAMMER:	S.BALL			    *
+*VERSION:	1.00			    *
+*FANT REL VER:	400			    *
+*DESCRIPTION:				    *
+*VERSION INFO:                			    *
+*********************************************************************
+*BUILD SWITCHES
+*/A - ASSEMBLE THE FOLLOWING FILES
+*/L - LINK THE FOLLOWING FILES
+*/G - GLOBAL INCLUDE FILE - IF MODIFIED REASSEMBLE ALL FILE MUST BE IN THE RELEVANT
+* GLOBAL INCLUDE FOLDER
+*
+*/Q	QUIET MODE
+*/V 	VERBOSE MODE
+*/c "1234" - set creator type
+*
+***BUILD FANTASM 3.00
+*ASSEMBLE IF OUT OF DATE THE FOLLOWING FILES
+/G FANTASM_EQUS		*GLOBAL INCLUDE FILE
+/G A5_OFFSETS.S		*GLOBAL INCLUDE FILE
+/G LIGHTSOFT_MACROS.S	*GLOBAL INCLUDE FILE
+
+/g mac_traps_68k.def	*from headers
+
+/q		*quiet mode please
+/c "ANVL"	*creator - Fantasm V4.00
+
+/A FANTASM.S		*MAIN CONTROL
+/a	fant_handle_aevt.s
+
+/A MOUSE_EVENTS.S
+/A ASSEMBLER_WINDOW.S
+/A NEW_FILE_IO.S
+/A MENUS.S
+/A PREFS_DIALOG.S
+/A new_SET_PATHS.S
+
+/A ASS.S
+/A ASS_JMP_TABLE.S
+/A GENERAL.S
+*/A BUILD.S
+/a get_mode.s
+*/A LINK.S
+/A PASS1.S
+/A BUILD_RECEIVE.S
+/A DO_PASS1.S
+/A DIRECTIVE.S
+/A DIRECTIVES_2.S
+/A	directives_3.s
+/A EVALUATE.S
+/A EVALUATE2.S
+/A SEARCH_LAB.S
+/A FIND_ERROR.S
+/A FIND_INCS.S
+/A INSTS_1.S
+/A INSTS_2.S
+/A INSTS_3.S
+/A INST_MULT.S
+/A INSTS_V2.S
+/A INST_TABLE.S
+/a	ppc_branch_processor.s
+/a	ppc_assm_tables.s
+/a	ppc_int_assm_tables.s
+/a	ppc_fixed_point_processor#1.s
+/a	ppc_cmp_assm_tables.s
+/a	ppc_fixed_point_processor#2.s
+/a	ppc_trap_assm_tables.s
+/a	ppc_fixed_point_processor#3.s
+/a	ppc_floating_processor#1.s
+/A PASS2.S
+/a	ppc_float_tables.s
+/a	data_island.s
+
+/A RUN_IN_MAC.S
+/A TYPES.S
+/A MACRO_ROUTINES.S
+/A WRITE_ST.S
+/A WRITE_MAC_LOADER.S
+/A LOADER1_2.S
+/A WRITE_LINK.S
+/A WRITE_SEG_LOADER.S
+/a	Write_XCOFF_Frag.S
+/a read_libs.s
+/a set_up_res.s
+/A VOICE.S
+/A SELECTORS.S
+/a	report_disk_error.s
+/a	ppc_fixed_point_processor#4.s
+/a	ppc_write_link.s
+/a	ppc_link.s
+/a	read_libs_ppc.s
+*/a	Lightsoft_modal.s
+/a	do_mem_resource.s
+/a	do_dlls.s
+/a	fant_handle_comms.s
+/a	anvil_interface.s
+
+*/n	*no libs
+******NOW THE LINKER COMMANDS
+******NOTE THERE ARE NO SWITCHES FOR THE LINKER AS YET - ALL IT UNDERSTANDS
+****** IS /L
+*/v
+
+**NOTE _ the ordering of files in this table is important due to 16 bit lea's
+/L FANTASM.O
+/L SELECTORS.O
+/L MOUSE_EVENTS.O
+/L ASSEMBLER_WINDOW.O
+/L MENUS.O
+*/L PREFS_DIALOG.O
+/L NEW_FILE_IO.O
+*/L new_set_paths.O
+/L ASS.O
+*/L LINK.O
+*/l	fant_handle_aevt.o		*new for 350
+/L PASS1.O
+*/L BUILD.O
+/L GENERAL.O
+/L ASS_JMP_TABLE.O		*here
+
+/L BUILD_RECEIVE.O
+/l get_mode.o
+/L DIRECTIVE.O
+/l	directives_3.o
+/L EVALUATE.O
+/L EVALUATE2.O
+/L SEARCH_LAB.O
+/L DIRECTIVES_2.O
+/L FIND_INCS.O
+/L FIND_ERROR.O
+/L PASS2.O
+/L DO_PASS1.O
+/L INSTS_1.O
+/L INSTS_2.O
+/L INSTS_3.O
+/l	data_island.o
+/L INST_MULT.O
+/L INSTS_V2.O
+/L INST_TABLE.O
+/l	ppc_assm_tables.o
+/l	ppc_int_assm_tables.o
+/l	ppc_trap_assm_tables.o
+/l	ppc_cmp_assm_tables.o
+/l	ppc_branch_processor.o
+/l	ppc_float_tables.o
+/L TYPES.O
+/L RUN_IN_MAC.O
+/L MACRO_ROUTINES.O
+/L WRITE_LINK.O
+/l	ppc_write_link.o
+*/L WRITE_SEG_LOADER.O
+*/L WRITE_ST.O
+/L WRITE_MAC_LOADER.O
+*/l	Write_XCOFF_Frag.o
+*/L LOADER1_2.O
+/l read_libs.o
+/l	read_libs_ppc.o
+/l set_up_res.o
+*/L VOICE.O
+/l	report_disk_error.o	*new for 320
+/l	ppc_fixed_point_processor#3.o
+/l	ppc_floating_processor#1.o
+/l	ppc_fixed_point_processor#1.o
+/l	ppc_fixed_point_processor#2.o
+/l	ppc_fixed_point_processor#4.o
+/l	ppc_link.o
+*/l	Lightsoft_modal.o
+*/l	do_mem_resource.o
+*/l	do_dlls.o
+/l	fant_handle_comms.o
+/l	anvil_interface.o

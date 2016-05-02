@@ -1,0 +1,107 @@
+*******************************************************************************
+*Project:                                                                     *
+*Author:        ???                                                           *
+*Filename:      Untitled 2                                                    *
+*Version:                                                                     *
+*Date started:  22:27:50 on 24th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+
+;
+; record structure
+;
+;
+; primary opcode decode 64 table entry
+;
+; seocndary opcode decode
+; top 2 bits of secondary opcode to one of four routines
+; each routine contains serial compares
+;
+
+; all routes lead to field encode record
+;
+;
+; lists:
+; five operands on or off
+; source/destination field switch
+; record bit switch
+; output enable switch
+; link switch
+; ctr switch
+; bobi decode
+; trinary condition reg fields
+; crD/L decode
+; immediate/irrelevant data fields
+; 
+
+
+; D or S present?
+; A?
+; B?
+; C?
+; D=0, S=1
+; Record bit?
+; oe?
+; link?
+; ctr switch?
+; bobi?
+; crA ?
+; crB ?
+; crC ?
+; crD ?
+; crbD
+; mtcrf ?
+;
+
+DS	equ	1	*dest or src reg
+A	equ	2	*op1
+B	equ 4	*op2
+C	equ	8	*op3
+D	equ	16	*op4
+RB	equ	32	*record bit
+OE	equ	64	*to overflow bit=1
+LK	equ	128	*to link=1,from link =2
+CR	equ	256	*to cr field=1, from crfield=2
+BOBI	equ	512
+crA	equ	1024
+crB	equ	2048
+crC	equ	4096
+crD	equ	8192
+mem_	equ	16384
+mtctf	equ	32768	*to ctr=1, from counter=2
+
+
+	dc.w DS+A+B+C+D+RB+OE+LK+CR+BOBI+crA+crB+crC+crD+crbD+mtctf
+		
+
+; input_instruction		r7
+; input record r6
+; pipe pointer r8
+extract_field:
+
+	section
+	cmpwi	r6.DS
+	bne		.fail
+
+	extraction_instruction 6,10,r7	  
+
+; are we source or destination in this field
+	stw		r7,rt(r8)
+	b	.success
+.fail:
+
+
+.success:
+	cmpwi	r6,A
+	bne		.fail
+
+	b	.success
+.fail:
+
+.success:
+	blr
+	
+	
+	

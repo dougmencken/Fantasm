@@ -1,0 +1,84 @@
+*******************************************************************************
+*Project:       Fantasm
+*Author:        LS97
+*Filename:      R2D2 pipeline control  definitions
+*Version:
+*Date started:  9:48:07 on 24th August 1997
+*
+*Rev. History:  24/08/97 - Rob - Created basic shell
+*
+*
+*******************************************************************************
+
+
+field_size:	equ	528
+pipe_num_records:	equ	20
+
+; pipe record structure
+
+pipeR_instruction:	equ 0
+pipeR_regT:			equ	4	*reg #0-31=int, 32-63=float -1=other -2=rega&regb contain from cc
+pipeR_regA:			equ	8
+pipeR_regB:			equ	12
+pipeR_regC:			equ	16
+pipeR_regD:			equ	20
+pipeR_toctr:		equ	24
+pipeR_fromctr:		equ	28
+pipeR_tolink:		equ	32
+pipeR_fromlink:		equ	36
+pipeR_tocc:			equ	40		; cr0-cr7=0-7   fpscr0-fpscr7=8-15
+pipeR_fromcc:		equ	44
+pipeR_instr_class:	equ	48		; 1=int, 2=float, 4=bra, 8=stalled/all units being flushed
+pipeR_instr_cycle:	equ	52
+pipeR_Tneeded:	equ	56
+pipeR_memory_read:	equ	60		; 1=memory load access 0=not
+;pipeR_linenumber:	equ	28
+pipeR_compare_tagged: equ 64	; -1 not tagged
+pipeR_entry_valid:	equ	68			; TRUE=valid FALSE=not_valid - BIG NOTE: not initialised by decode
+;pipeR_field1:		equ	48
+;pipeR_field2:		equ pipeR_field1+field_size
+;pipeR_field3:		equ	pipeR_field2+field_size
+
+;pipeR_size:			equ	pipeR_field3+field_size+64
+pipeR_size:			equ	72
+; end of pipe record structure
+
+int_class:		equ	1
+float_class:	equ	2
+bra_class:		equ	4
+flush_class:	equ	8
+cmp_class:		equ	16
+
+pipe_top:		reg	r16	; points at the first record
+pipe_entry:		reg	r17
+pipe_exit:		reg r18
+pipe_bottom:	reg	r19	; points at the LAST record
+
+
+next_record:	MACRO
+				addi	\1,\1,pipeR_size
+				cmpw	\1,`pipe_bottom
+				ble		no_rollover\@
+				
+				mr		\1,`pipe_top
+no_rollover\@:
+				ENDM
+
+
+previous_record:	MACRO
+					subi	\1,\1,pipeR_size
+					cmpw	\1,`pipe_top
+					bge		pr_no_rollover\@
+					
+					mr	\1,`pipe_bottom
+pr_no_rollover\@:	
+					ENDM
+
+
+find_insert_record:	MACRO
+					mr		\1,`pipe_entry
+					ENDM
+					
+					
+total_pipe_size:	equ	pipeR_size*pipe_num_records
+

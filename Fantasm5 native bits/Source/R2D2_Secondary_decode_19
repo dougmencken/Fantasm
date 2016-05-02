@@ -1,0 +1,99 @@
+	include	r2d2_support_macros
+*******************************************************************************
+*Project:                                                                     *
+*Author:        SBB                                                           *
+*Version:                                                                     *
+*Date started:  15:29:58 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+*mcrf - we need to set BFA as being read from
+**No need to set the to field as it'll happen "now"
+
+	macs_last
+decode_19:
+	sub_in
+**Check secondary - 22-30
+	lwz	r4,the_instruction(`bss)
+	extrwi	r5,r4,10,21
+	cmpwi	r5,0
+	beq	decode_mcrf
+	cmpwi	r5,16
+	beq	decode_bclr
+	cmpwi	r5,33
+	beq	decode_crnor
+	cmpwi	r5,50
+	beq	default_branch
+	cmpwi	r5,129
+	beq	decode_crandc
+	cmpwi	r5,150	
+	beq	decode_isync
+	cmpwi	r5,528	*bc to ctr
+	beq	decode_bcctr
+**must be cr logical
+	b	decode_crlog
+**must be illegal
+	sub_out
+	
+default_branch:
+	li	r5,bra_class
+	stw	r5,pipeR_instr_class(r20)
+	sub_out
+	
+decode_bcctr:
+**dependant on ctr and condition
+**Set counter field
+	li	r5,1
+	stw	r5,pipeR_fromctr(r20)
+**Decode CC filed
+**get bit, divide by 8 to get cc field
+	extrwi	r5,r4,5,11	*BI at bit 11 for 5 bits
+	srwi	r5,r5,2		*div 4 gives field
+	stw	r5,pipeR_fromcc(r20)
+
+	li	r5,bra_class
+	stw	r5,pipeR_instr_class(r20)
+
+	sub_out
+	global	decode_bcctr
+decode_isync:
+	li	r5,flush_class		*ROB!
+	stw	r5,pipeR_instr_class(r20)
+	sub_out
+	global	decode_isync
+
+decode_crlog:
+	bl	three_crs	*rt=-2, ra and rb = cra and crb
+	sub_out
+	global	decode_crlog
+
+decode_crandc:
+	bl	three_crs	*rt=-2, ra and rb = cra and crb
+	sub_out
+	global	decode_crandc
+
+decode_crnor:
+	bl	three_crs	*rt=-2, ra and rb = cra and crb
+	sub_out
+	global	decode_crnor
+decode_bclr:
+**here we need to read the LR
+	li	r5,1
+	stw	r5,pipeR_fromlink(r20)
+**Set class
+	li	r5,bra_class
+	stw	r5,pipeR_instr_class(r20)
+	sub_out
+	global	decode_bclr
+decode_mcrf:	
+**Set the fromCC field for bfA
+	extrwi	r5,r4,3,11
+	stw	r5,pipeR_fromcc(r20)
+**Set class
+	li	r5,bra_class
+	stw	r5,pipeR_instr_class(r20)
+	sub_out
+	global	decode_mcrf
+	global	decode_19
+	extern	three_crs

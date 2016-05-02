@@ -1,0 +1,6782 @@
+*************************************************************************
+*Project: LXT                                                           *
+*************************************************************************
+*Popular MacOS calls as macros for 68K to PowerPC translation           *
+
+*Author: SB                                                             *
+
+*Date: July 2003                                                        *
+
+*Needs: Fantasm >5.09                                                   *
+
+*Version: 1.05 - Fixes Gestalt, adds more dialog calls - setdefault 
+*item etc.                                                              *
+*Version 1.06 - Adds AEDisposeDesc and adds OSCreateDesc as an alias of 
+*CreateDesc
+
+*Version 2.00 - Adds some Appearance Manager calls
+
+*Version 2.01 - Adds some more file manager calls
+
+*Version 3.00 - Adds selected (PPC only) Carbon calls - needs CARBON defined
+*               as either 0 or 1
+
+*************************************************************************
+*This file is part of Lightsoft's Cross Translation (LXT) set.          *
+*Please ensure all LXT files you are using are the same version!        *
+*See LSA0500 for usage instructions.                                    *
+*                                                                       *
+*LXT is a technology for translating from one language to another using *
+*macros                                                                 *
+*                                                                       *
+* LXT is distributed under the GNU General Public License. Please       *
+* see the file COPYING for more details                                 *
+*************************************************************************
+
+CHECK_MEM_ERR:	equ	0	*set to zero to not checm memerr after mem routines
+	
+	ifnd	CARBON
+CARBON:	equ	1
+	endif
+	
+MAXMEM_VALUE:	equ	41943040	;what maxmem returns
+
+trashv:	macro
+	endm	*remove this macro if real 68k_trash_regs is present
+
+**PPC trash r4,r5
+trash45:	macro
+;	lis	r4,0xffff
+;	lis	r5,0xffff
+	endm	
+set_lock:	MACRO	*takes a register identifier such as d0 in parm1 and sets
+*the in-use lock if r3-r5
+*parm=68K register, parm2=parm number
+**Handles dn,an,sp - DOES NOT HANDLE PC
+*get first char
+[f$]:	left$	\1,1	
+*try for data reg
+		ifc	"[f$]","d"
+[a$]:		mid$	\1,1,1	*get register number
+reg_1:		asc$	[a$]
+reg_temp:	set	reg_1-48	*make real number
+		lock_reg	reg_temp,\2
+		break
+		endif
+**try for address reg
+		ifc	"[f$]","a"
+[a$]:		mid$	\1,1,1	*get register number
+reg_1:		asc$	[a$]
+reg_temp:	set	(reg_1-48)+8
+			lock_reg	reg_temp,\2	*pass parameter number
+		break
+		endif
+*try for sp
+	ifc	"\1","sp"
+[t$]:	equ$	r1
+	else
+	fail	"Unknown register in lock_reg"
+	endif
+	ENDM	*code reg	
+
+clear_locks:	macro
+lock3:	set	0
+lock4:	set	0
+lock5:	set	0
+p1:	set	0
+p2:	set	0
+p3:	set	0	*upto 3 params we couldn't allocate because in use as param (d0-d2)
+have_moved_3:	set	0	*set to a 1 when we have moved the param
+have_moved_4:	set	0
+have_moved_5:	set	0
+	endm
+	
+lock_reg:	MACRO	*in=register number 0-15,out=t$
+	ifeq	0-\1	*d0
+lock3:	set	1
+p1:	set	\2	*So we know which regs are unmoveable if we need to move them manually
+	break
+	endif
+
+	ifeq	1-\1	*d1
+lock4:	set	1
+p2:	set	\2
+	break
+	endif
+
+	ifeq	2-\1	*d2
+lock5:	set	1
+p3:	set	\2
+	break
+	endif
+
+	ENDM	of lock_reg
+	
+clear_lock:	macro	*takes a  ppc reg identifier in \1. If r3-r5 clears that in-use lock
+**length=2
+cl_len:	len	\1
+		ifeq	cl_len-2
+[a$]:	mid$	\1,1,1
+			ifc	"3","[a$]"
+lock3:			set	0
+			break
+			endif
+	
+			ifc	"4","[a$]"
+lock4:		set	0
+			break
+			endif
+	
+			ifc	"5","[a$]"
+lock5:		set	0
+			break
+			endif
+	
+		endif
+	endm	*of clear_lock
+	
+set_moved:	macro	*takes a  ppc reg identifier in \1. If r3-r5 clears that in-use lock
+**length=2
+cl_len:	len	\1
+		ifeq	cl_len-2
+[a$]:	mid$	\1,1,1
+			ifc	"3","[a$]"
+have_moved_3:	set 1
+			break
+			endif
+	
+			ifc	"4","[a$]"
+have_moved_4:	set	1
+			break
+			endif
+	
+			ifc	"5","[a$]"
+have_moved_5:	set	1
+			break
+			endif
+	
+		endif
+	endm	*of clear_lock
+	
+	
+test_locks:	macro
+master_lock:	set	0
+	if	lock3
+master_lock:	set	1
+	break
+	endif
+	if	lock4
+master_lock:	set	1
+	break
+	endif
+	if	lock5
+master_lock:	set	1
+	break
+	endif
+	endm	of test locks
+	
+test_moveds:	macro
+master_moved:	set	1
+	if	have_moved_3
+	if	have_moved_4
+	if	have_moved_5
+master_moved:	set	0
+	endif
+	endif
+	endif
+	endm	*of test_moveds
+
+test_moveds2:	macro	*specific case for two operands
+master_moved:	set	1
+	if	have_moved_3	*moved r3
+	if	have_moved_4	*moved r4
+master_moved:	set	0
+	endif
+	endif
+	endm	*of test_moveds
+
+
+;master_lock:	 set	1
+;	 break
+;	 endif
+;	 if	lock4
+;master_lock:	 set	1
+;	 break
+;	 endif
+;	 if	lock5
+;master_lock:	 set	1
+;	 break
+;	 endif
+;	 endm	 of test locks
+
+
+
+*********************CARBON*****************
+OSSetPortWindowPort:	macro	*Where
+	macs_last	*avoid clashes with real instructions
+	push	d0
+	push	d1
+	push 	d2
+	macs_last
+	map_in_1	\1
+	Xcall	SetPortWindowPort
+	trash45
+	macs_first	  *back to translate mode
+	popq	d2
+	popq	d1
+	popq	d0
+	endm
+OSGetWindowPortBounds:	macro	*window, *rect
+	macs_last	*avoid clashes with real instructions
+	push	d0
+	push	d1
+	push 	d2
+
+	map_in_1	\1
+	Xcall	GetWindowPortBounds
+	map_out	\2
+	trash45
+	macs_first	  *back to translate mode
+	endm
+	
+
+OSGetDialogWindow:	macro	*DialogRef, WindowRef
+	macs_last	*avoid clashes with real instructions
+
+	map_in_1	\1
+	Xcall	GetDialogWindow
+	map_out	\2
+	trash45
+	macs_first	  *back to translate mode
+	endm
+
+		
+OSGetWindowPort:	macro	*window, return port
+	macs_last	*avoid clashes with real instructions
+
+	map_in_1	\1
+	Xcall	GetWindowPort
+	map_out	\2
+	trash45
+	macs_first	  *back to translate mode
+	endm
+	
+	
+OSQDFlushPortBuffer:	macro
+	push	d0
+	push	d1
+	push 	d2
+	macs_last
+
+	map_in_2	\1,\2	*windowref, ptr to rect
+	Xcall	QDFlushPortBuffer
+	trash45
+	macs_first	  *back to translate mode
+	popq	d2
+	popq	d1
+	popq	d0
+	endm
+
+OSSetControlVisibility:	macro
+	macs_last
+
+	map_in_3	\1,\2,\3	*windowref, ptr to rect
+	Xcall	SetControlVisibility
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	macs_first	  *back to translate mode
+	endm
+
+OSGetControlBounds:	macro
+	macs_last
+
+	map_in_2	\1,\2	*controlref (a handle), ptr to rect
+	Xcall	GetControlBounds
+	trash45
+	macs_first	  *back to translate mode
+	endm
+
+OSGetPortBounds:	macro
+	push	d0
+	push	d1
+	push 	d2
+	macs_last
+
+	map_in_2	\1,\2	*windowref, ptr to rect
+	Xcall	GetPortBounds
+	trash45
+	macs_first	  *back to translate mode
+	popq	d2
+	popq	d1
+	popq	d0
+	endm
+
+OSGetWindowBounds:	macro
+	push	d0
+	push	d1
+	push 	d2
+	macs_last
+
+	map_in_3	\1,\2,\3	*windowref, region code,  ptr to rect
+	Xcall	GetWindowBounds
+	cmpwi	r3,0	;error
+	map_out	\4
+
+	trash45
+	macs_first	  *back to translate mode
+	popq	d2
+	popq	d1
+	popq	d0
+	endm
+	
+OSInvalWindowRect:	macro
+	macs_last
+
+	map_in_2	\1,\2	*windowref, ptr to rect
+	Xcall	InvalWindowRect
+	trash45
+	macs_first	  *back to translate mode
+	endm
+
+OSValidWindowRect:	macro
+	macs_last
+
+	map_in_2	\1,\2	*windowref, ptr to rect
+	Xcall	ValidWindowRect
+	trash45
+	macs_first	  *back to translate mode
+	endm
+
+OSEnableMenuItem:	macro	*menu(reg),item(reg)
+	macs_last
+	map_in_2	\1,\2
+	ifne	CARBON
+	Xcall	EnableMenuItem
+	else
+	Xcall	EnableItem
+	endif
+	trash45
+	macs_first	  *back to translate mode
+	endm
+
+OSDisableMenuItem:	macro	*menu(reg),item(reg)
+	macs_last
+	map_in_2	\1,\2
+	ifne	CARBON
+	Xcall	DisableMenuItem
+	else
+	Xcall	DisableItem
+	endif
+	trash45
+	macs_first	  *back to translate mode
+	endm
+	
+	
+OSPBHGetVolSync:	macro	*reg->PB
+	 	*avoid clashes with real instructions
+
+	map_in_1	\1
+	Xcall	PBHGetVolSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+
+	 	   
+	endm
+	
+	
+OSCountMenuItems:	macro
+	macs_last
+
+	map_in_1	\1
+	ifne	CARBON
+	Xcall	CountMenuItems
+	else
+	Xcall	CountMItems
+	endif
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+
+	macs_first	  *back to translate mode
+	endm
+	
+
+*********************INIT*******************
+OSInitGraf:	macro
+	macs_last
+	if	68k
+	move.l	\1,-(sp)	*Where QDGlobs to go
+	dc.w	_InitGraf
+	else
+	ifd	LXT_show_OScalls
+OSInitGraf\@:
+	global	OSInitGraf\@
+	endif
+		
+	map_in_1	\1	
+	Xcall	InitGraf
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSInitDialogs:	macro
+	macs_last
+	if	68k
+	move.l	\1,-(sp)	*Resume proc
+	dc.w	_InitDialogs
+	trashv
+	else
+	ifd	LXT_show_OScalls
+OSInitDialogs\@:
+	global	OSInitDialogs\@
+	endif
+	map_in_1	\1	
+	Xcall	InitDialogs
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSInitFonts:	macro
+	macs_last
+	if	68k
+	dc.w	_InitFonts
+	trashv
+	else	
+	Xcall	InitFonts
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSInitWindows:	macro
+	macs_last
+	if	68k
+	dc.w	_InitWindows
+	trashv
+	else	
+	Xcall	InitWindows
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSInitMenus:	macro
+	macs_last
+	if	68k
+	dc.w	_InitMenus
+	trashv
+	else	
+	Xcall	InitMenus
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSTEInit:	macro
+	macs_last
+	if	68k
+	dc.w	_TEInit
+	trashv
+	else	
+	Xcall	TEInit
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSInitCursor:	macro
+	macs_last
+	if	68k
+	dc.w	_InitCursor
+	trashv
+	else	
+	Xcall	InitCursor
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+*******************MEMORY*******************
+OSMoreMasters:	macro
+	macs_last
+	if	68k
+	dc.w	_MoreMasters
+	trashv
+	else
+	Xcall	MoreMasters
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSRecoverHandle:	macro
+	macs_last	*assemble the following
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_RecoverHandle
+	trashv	a0
+		ifnc	"\2","A0"
+		move.l	a0,\2
+		endif
+	else
+	map_in_1	\1
+	Xcall	RecoverHandle
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetHandleSize:	macro	*handle(reg), size(reg)
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\2","D0"
+	move.l	\2,d0
+	endif
+	dc.w	_SetHandleSize
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	SetHandleSize
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm	
+
+
+OSGetHandleSize:	macro	*handle(reg),size(reg)
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_GetHandleSize
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	GetHandleSize
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSFreeMem:	macro	*return reg
+	macs_last
+	if 68k
+	dc.w	_FreeMem
+	trashv	d0
+	ifnc	"\1","D0"
+	move.l	d0,\1
+	endif
+	else
+	Xcall	FreeMem
+	trash45
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSBlockMove:	macro	*src,dest,size
+	macs_last
+	if 68k
+	ifnc	"\3","D0"
+	move.l	\3,d0
+	endif
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\2","A1"	*68K is always upper case internally
+	move.l	\2,a1
+	endif
+	dc.w	_BlockMove
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	BlockMove
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSBlockMoveData:	macro	*src,dest,size
+	macs_last
+	if 68k
+	ifnc	"\3","D0"
+	move.l	\3,d0
+	endif
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\2","A1"	*68K is always upper case internally
+	move.l	\2,a1
+	endif
+	dc.w	$a22e
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	BlockMoveData
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+
+OSHGetState:	macro	handle,return (regs)
+	macs_last
+	if	68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_HGetState
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	HGetState
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+**param1=input ptr,output
+OSMaxMem:	macro
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_MaxMem
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\1
+	endif
+	else
+	ifeq	CARBON
+	map_in_1	\1
+	Xcall	MaxMem
+	trash45
+	map_out	\2
+	else	;carbon - always returns in r3, trashes r4 - 181100 Stu
+	map_in_1	\1
+	Xcall	MaxMem
+	trash45
+	movei	r4,MAXMEM_VALUE
+	cmpw	r3,r4
+	blt	mem_ok\@
+	mr	r3,r4	;return 20 megs	
+mem_ok\@:
+	endif	;carbon
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMaxApplZone:	macro
+	macs_last
+	if	68k
+	dc.w	_MaxApplZone
+	trashv
+	else
+	Xcall	MaxApplZone
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetApplLimit:	macro
+	macs_last
+	if 68k
+	dc.w	_SetApplLimit
+	trashv
+	else
+	map_in_1	\1
+	Xcall	SetApplLimit
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNewHandleClear:	macro	*size wanted,handle
+	macs_last
+	if 68k
+		ifnc	"\1","D0"	*Dont copy to D0 if it is d0
+		move.l	\1,d0
+		endif
+		dc.w	_NewHandleClear
+		trashv	a0
+		ifnc	"\2","A0"
+		move.l	a0,\2
+		endif
+
+	else
+	map_in_1	\1
+		Xcall	NewHandleClear
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNewHandle:	macro	*size wanted,handle
+	macs_last
+	if 68k
+	ifnc	"\1","D0"	*Dont copy to D0 if it is d0
+	move.l	\1,d0
+	endif
+	dc.w	_NewHandle
+	trashv	a0
+	ifnc	"\2","A0"
+	move.l	a0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	NewHandle
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNewHandleSysClear:	macro	*size wanted,handle
+	macs_last
+	if 68k
+	ifnc	"\1","D0"	*Dont copy to D0 if it is d0
+	move.l	\1,d0
+	endif
+	dc.w	_NewHandleSysClear
+	trashv	a0
+	ifnc	"\2","A0"
+	move.l	a0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	NewHandleSysClear
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNewPtr:	macro	*size wanted,handle
+	macs_last
+	if 68k
+	ifnc	"\1","D0"	*Dont copy to D0 if it is d0
+	move.l	\1,d0
+	endif
+	dc.w	_NewPtr
+	trashv	a0
+	ifnc	"\2","A0"
+	move.l	a0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	NewPtr
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNewPtrClear:	macro	*size wanted,handle
+	macs_last
+	if 68k
+	ifnc	"\1","D0"	*Dont copy to D0 if it is d0
+	move.l	\1,d0
+	endif
+	dc.w	0xa31e	*was a21e
+	trashv	a0
+	ifnc	"\2","A0"
+	move.l	a0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	NewPtrClear
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSMoveHHi:	macro	*handle
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_MoveHHi
+	trashv
+	else
+	map_in_1	\1
+	Xcall	MoveHHi
+	trash45
+	if	CHECK_MEM_ERR
+	Xcall	LMGetMemErr
+	cmpwi	r3,0
+	beq	mem_ok10\@
+	illegal
+mem_ok10\@:
+	endif
+
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSHLock:	macro	*handle
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_HLock
+	trashv
+	else
+	map_in_1	\1
+	Xcall	HLock
+	trash45
+	if	CHECK_MEM_ERR
+	Xcall	LMGetMemErr
+	cmpwi	r3,0
+	beq	mem_ok1\@
+	illegal
+mem_ok1\@:
+	endif
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSHUnlock:	macro
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_HUnlock
+	trashv
+	else
+	map_in_1	\1
+	Xcall	HUnlock
+	trash45
+	if	CHECK_MEM_ERR
+	Xcall	LMGetMemErr
+	cmpwi	r3,0
+	beq	mem_ok2\@
+	illegal
+mem_ok2\@:
+	endif
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisposeHandle:	macro
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_DisposeHandle
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DisposeHandle
+	if	CHECK_MEM_ERR
+	Xcall	LMGetMemErr
+	cmpwi	r3,0
+	beq	mem_ok3\@
+	illegal
+mem_ok3\@:
+	endif
+	
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisposePtr:	macro
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_DisposePtr
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DisposePtr
+	trash45
+	if	CHECK_MEM_ERR
+	Xcall	LMGetMemErr
+	cmpwi	r3,0
+	beq	mem_ok4\@
+	illegal
+mem_ok4\@:
+	endif
+
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPtrToHand:	macro	*ptr(reg),ptr to result handle(reg),size(reg)
+	macs_last
+	if 68k
+	move.l	\2,-(sp)	*Save destination
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\3","D0"
+	move.l	\3,d0
+	endif
+	dc.w	_PtrToHand
+	trashv	a0
+	move.l	(sp)+,\2	*restore destination for handle
+	move.l	a0,(\2)	*save handle
+	else
+	map_in_3	\1,\2,\3
+	Xcall	PtrToHand
+	trash45
+	if	CHECK_MEM_ERR
+	Xcall	LMGetMemErr
+	cmpwi	r3,0
+	beq	mem_ok5\@
+	illegal
+mem_ok5\@:
+	endif
+
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+************************DEBUG UTILS****************************
+**Lock a portion of the address space whilst leaving data caching
+**enabled
+OSDebuggerLockMemory:	macro	*starting address, number of bytes to lock
+	macs_first
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\2","A1"
+	move.l	\2,a1
+	endif
+	moveq	#6,d0
+	dc.w	$a08d
+	ifnc	"\3","D0"
+	move.l	d0,\3
+	endif
+	
+	else
+	map_in_2	\1,\2
+	Xcall	DebuggerLockMemory
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+
+	endm
+
+**Unlock memory locked with DebuggerLockMemory
+OSDebuggerUnlockMemory:	macro	*starting address, number of bytes to unlock
+	macs_first
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\2","A1"
+	move.l	\2,a1
+	endif
+	moveq	#7,d0
+	dc.w	$a08d
+	ifnc	"\3","D0"
+	move.l	d0,\3
+	endif
+	
+	else
+	map_in_3	\1,\2
+	Xcall	DebuggerUnlockMemory
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+***********************APPEARANCE******************************
+OSRegisterAppearanceClient:	macro
+	if 68k
+	clr.l	-(sp)
+	qmoveq	#0x15,d0
+	dc.w	$aa74
+	move.l	(sp)+,\1
+	else
+	Xcall	RegisterAppearanceClient
+	map_out	\1
+	endif
+	endm
+
+OSSetThemeBackground:	macro
+	if 68k
+	clr.l	-(sp)
+	move.w	\1,-(sp)	*brush
+	move.w	\2,-(sp)	*bit depth
+	move.b	\3,-(sp)	*boolean is_colour?
+	qmoveq	#0x2,d0
+	dc.w	$aa74
+	move.l	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SetThemeBackground
+	map_out	\4
+	endif
+	endm
+
+OSSetThemePen:	macro
+	if 68k
+	clr.l	-(sp)
+	move.w	\1,-(sp)	*brush
+	move.w	\2,-(sp)	*bit depth
+	move.b	\3,-(sp)	*boolean is_colour?
+	qmoveq	#0x1,d0
+	dc.w	$aa74
+	move.l	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SetThemePen
+	map_out	\4
+	endif
+	endm
+
+OSSetThemeTextColor:	macro
+	if 68k
+	clr.l	-(sp)
+	move.w	\1,-(sp)	*brush
+	move.w	\2,-(sp)	*bit depth
+	move.b	\3,-(sp)	*boolean is_colour?
+	qmoveq	#0x3,d0
+	dc.w	$aa74
+	move.l	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SetThemeTextColor
+	map_out	\4
+	endif
+	endm
+	
+***********************ALERTS/DIALOGS**************************
+OSAlert:	macro	*resource id,filter proc,return reg
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.w	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_alert
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	Alert
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSStopAlert:	macro	*resource id,filter proc,return reg
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.w	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	$a986	*stopalert
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	StopAlert
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSCautionAlert:	macro	*resource id,filter proc,return reg
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.w	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	$a988	*cautionalert
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	CautionAlert
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNoteAlert:	macro	*resource id,filter proc,return reg
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.w	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	$a987	*notealert
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	NoteAlert
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+	
+OSParamText:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	move.l	\4,-(Sp)
+	dc.w	_ParamText
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	ParamText
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisposeDialog:	macro	*reg=dialog
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	$A983
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DisposeDialog
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSModalDialog:	macro	*filterproc(reg),item(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_ModalDialog
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	ModalDialog
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetNewDialog:	macro	*id,storage,behind,return reg
+	macs_last
+	if 68k
+	subq.w	#4,sp
+	move.w	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	dc.w	_GetNewDialog
+	trashv
+	move.l	(sp)+,\4
+
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetNewDialog
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetDialogItem:	macro	*dlg handle(reg),item number(reg),type(reg),handle(reg),rect(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.l	\3,-(sp)
+	move.l	\4,-(sp)
+	move.l	\5,-(sp)
+	dc.w	_GetDialogItem
+	trashv
+	else
+	map_in_5	\1,\2,\3,\4,\5
+	Xcall	GetDialogItem
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+		
+OSSetItemText:	macro	*ihandle(reg),textstr(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_SetIText
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	SetDialogItemText
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSGetItemText:	macro	*ihandle(reg),textstrptr(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_GetItemText
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	GetDialogItemText
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSShowDialogItem:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_showdialogitem
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	ShowDialogItem
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSHideDItem:	macro	*ihandle(reg),item(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_HideDItem
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	HideDialogItem
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSSelIText:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)	*dhandle
+	move.w	\2,-(sp)	*item
+	move.w	\3,-(sp)	*selstart
+	move.w	\4,-(sp)	*Selend
+	dc.w	_SelIText
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	SelectDialogItemText
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSShortenDITL:	macro	*dialog,item_count
+	macs_last
+	if 68k
+	move.l	(sp)+,d2	*save current data
+	move.l	\1,-(sp)	*dialog pointer
+	move.w	\2,-(sp)
+	move.w	#0x404,-(sp)	*Selector for shortenditl
+	move.l	sp,a0		*get data in a0
+	move.l	d2,-(sp)	*back on
+	dc.w	_CommToolboxDispatch	*do it (commtoolbox??????)
+	trashv
+	move.l	(sp)+,d1	*old data
+	lea	8(sp),sp		*tidy up stack
+	move.l	d1,-(sp)	*back to where it was
+	else
+	map_in_2	\1,\2
+	Xcall	ShortenDITL
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSAppendDITL:	macro	*dialog,ditl,method (0=overlay,1=at right,2=at bottom)
+	macs_last
+	if 68k
+	move.l	(sp)+,d3	*get return address
+	move.l	\1,-(sp)	*dialog ptr
+	move.l	\2,-(sp)	*handle to ditl
+	move.w	\3,-(sp)	*method
+	move.w	#0x402,-(sp)	*Selector for appendditl
+	move.l	sp,a0		*get data in a0
+	move.l	d3,-(sp)	*save return address
+	dc.w	_CommToolboxDispatch	*do it (commtoolbox??????)
+	trashv
+	move.l	(sp)+,d1	*get return address
+	lea	12(sp),sp		*tidy up stack
+	move.l	d1,-(sp)	*put back return address
+	else
+	map_in_3	\1,\2,\3
+	Xcall	AppendDITL
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSSetDialogDefaultItem:	macro	*resource id,filter proc,return reg
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.l	#0x304,d0
+	dc.w	$aa68
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	SetDialogDefaultItem
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetDialogCancelItem:	macro	*dialog,item
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.l	#0x305,d0
+	dc.w	$aa68
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	SetDialogCancelItem
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first
+	endm
+
+OSSetDialogTrackCursor:	macro	*dialog,boolean (yes if there is a text item to be tracked)
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.l	#0x306,d0
+	dc.w	$aa68
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	SetDialogTrackCursor
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first
+	endm
+	
+OSGetStdFilterProc:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp	*OSErr
+	move.l	\1,-(sp)	*ptr to theProc returned
+	move.l	#0x203,d0
+	dc.w	$aa68
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetStdFilterProc
+	trash45
+	endif
+	macs_first
+	endm
+
+***************************PROCESS****************************
+OSExitToShell:	macro
+	macs_last
+	if 68k
+	dc.w	_ExitToShell
+	else
+	Xcall	ExitToShell
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSOpenDeskAcc:	macro	*reg (ptr to name), return reg
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	dc.w	_OpenDeskAcc
+	trashv
+	move.w	(sp)+,\2
+	else
+	code_reg	\1	*returns PPC register in t$
+	map_in_1	\1
+	Xcall	OpenDeskAcc
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSystemTask:	macro
+	macs_last
+	if 68k
+	dc.w	_SystemTask
+	trashv
+	else
+	trash45
+	Xcall	SystemTask
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetCurrentProcess:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	where the PSN (64 bit) will go
+	move.w	#$37,-(sp)	getcurrentprocess
+	dc.w	_OSDispatch
+	trashv
+	move.w	(sp)+,\2	get error
+	else
+	map_in_1	\1
+	Xcall	GetCurrentProcess
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetNextProcess:	macro	*psn,OSErr
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	where the PSN (64 bit) will go
+	move.w	#$38,-(sp)	getnextprocess
+	dc.w	_OSDispatch
+	trashv
+	move.w	(sp)+,\2	get error
+	else
+	map_in_1	\1
+	Xcall	GetNextProcess
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetFrontProcess:	macro	*psn,OSErr
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	where the PSN (64 bit) will go
+	move.w	#$3b,-(sp)	setfrontprocess
+	dc.w	_OSDispatch
+	trashv
+	move.w	(sp)+,\2	get error
+	else
+	map_in_1	\1
+	Xcall	SetFrontProcess
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSGetProcessInformation:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	PSN
+	move.l	\2,-(sp)	inforec
+	move.w	#$3a,-(sp)	get process info in PIR
+	dc.w	_OSDispatch
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	GetProcessInformation
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSLaunch:	macro
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_Launch
+	trashv
+	else
+	map_in_1	\1
+	Xcall	LaunchApplication
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSDebugStr:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_DebugStr
+	else
+	map_in_1	\1
+	Xcall	DebugStr
+	endif
+	macs_first	  *back to translate mode
+	endm
+************************DATE/TIME****************************
+OSDelay:	macro
+	macs_last
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\2","A1"
+	move.l	\2,a1
+	endif
+	dc.w	_Delay
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	Delay
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSGetTime:	macro
+	macs_last
+	if 68k
+	move.l	\1,a0
+	dc.w	0x2038
+	dc.w	0x020c
+	dc.w	0xa9c6		*who cares what it means (but its move.l time,d0...
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetTime
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMicroseconds:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	0xA193
+	trashv	d0,a0
+	move.l	(sp)+,a1
+	move.l a0,(a1)+ 
+	move.l d0,(a1)
+
+	else
+	map_in_1	\1
+	Xcall	Microseconds
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSTickCount:	macro	*where the output is to go - must be a register
+	macs_last
+	if 68k
+	subq.w	#4,sp
+	dc.w	_TickCount
+	trashv
+	move.l	(sp)+,\1
+	else
+	Xcall	TickCount
+	trash45
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSReadDateTime:	macro	*record (reg)
+	macs_last
+	if 68k
+	move.l	\1,a0
+	dc.w	0xa039	*readdatetime
+	trashv	d0
+	move.w	d0,\2
+	else
+	map_in_1	\1
+	Xcall	ReadDateTime
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSecs2Date:	macro
+	macs_last
+	if 68k
+	ifnc	"\1","D0"
+	move.l	\1,d0
+	endif
+	dc.w	0xa9c6
+	trashv	a0
+	ifnc	"\2","A0"
+	move.l	a0,\2
+	endif
+	else
+	map_in_2	\1,\2
+	Xcall	SecondsToDate
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+*********************************MENUS***************************	
+OSGetMenu:	macro
+	macs_last
+	if 68k
+	subq.w	#4,sp
+	move.w	\1,-(sp)
+	dc.w	_GetRMenu
+	trashv
+	move.l	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	GetMenu
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSInsertMenu:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_InsertMenu
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	InsertMenu
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDelMenuItem:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_DelMenuItem
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	DeleteMenuItem
+	trash45
+	
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSCountMItems:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	dc.w	_CountMItems
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	CountMItems
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSGetMenuItem:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)	*menu
+	move.w	\2,-(sp)	*item
+	move.l	\3,-(sp)	*put item text here
+	dc.w	_GetItem
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetMenuItemText
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSSetItem:	macro	*menu handle(reg),item, text
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.l	\3,-(sp)
+	dc.w	_SetItem
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SetMenuItemText
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSEnableItem:	macro	*menu(reg),item(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_EnableItem
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	EnableItem
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm		
+
+OSHiliteMenu:	macro	*reg=menu id
+	macs_last
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_HiliteMenu
+	trashv
+	else
+	map_in_1	\1
+	Xcall	HiliteMenu
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+
+OSInsMenuItem:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)	*menu
+	move.l	\2,-(sp)	*text
+	move.w	\3,-(sp)	*item
+	dc.w	_InsMenuItem
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	InsertMenuItem
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSMenuKey:	macro	*char,return (regs)
+	macs_last
+	if 68k
+	subq.w	#4,sp
+	MOVE.W	\1,-(SP)	THE KEY
+	DC.W	_MENUKEY	GET MENU REFERENCE
+	trashv
+	MOVE.L	(SP)+,\2
+	else
+	map_in_1	\1
+	Xcall	MenuKey
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSSetItemMark:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)	*item
+	move.w	\3,-(sp)	*character
+	dc.w	_SetItemMark
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SetItemMark
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetItemCmd:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)	*menu
+	move.w	\2,-(sp)	*item
+	move.w	\3,-(sp)	*Cmd key
+	dc.w	_SetItemCmd
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SetItemCmd
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPopUpMenuSelect:	macro	*menu,top,left,popupitem
+	macs_last
+	if 68k
+	subq.w	#4,sp	*high word is menu id, low word item
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)		 *top where to
+	move.w	\3,-(sp)		 *left where to
+	move.w	\4,-(sp)		*default item is 1
+	dc.w	_popupmenuselect
+	trashv
+	move.l	(sp)+,\5		*id,item
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	PopUpMenuSelect
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisableItem:	macro	*menu(reg),item(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_DisableItem
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	DisableItem
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDrawMenuBar:	macro
+	macs_last
+	if 68k
+	dc.w	_DrawMenuBar
+	trashv
+	else
+	Xcall	DrawMenuBar
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMenuSelect:	macro	*coords(reg),result(reg)
+	macs_last
+	if 68k
+	subq.w	#4,sp
+	move.l	\1,-(sp)
+	dc.w	_MenuSelect
+	trashv
+	move.l	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	MenuSelect
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSAddResMenu:	macro
+	macs_last
+	if	68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_AddResMenu
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	AppendResMenu
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+OSAppendMenu:	macro	
+	macs_last
+	if	68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_AppendMenu
+	trashv
+	else
+	map_in_2	\1,\2
+	trash45
+	Xcall	AppendMenu
+	endif
+	macs_first	  *back to translate mode
+	endm	
+
+OSHMGetHelpMenuHandle:	macro	
+	macs_last
+	if	68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	#$200,d0
+	dc.w	_pack14	*HMgethelpmenuhandle
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	HMGetHelpMenuHandle
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+***********************************SOUND***************************
+OSSysBeep:	macro
+	macs_last
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_SysBeep
+	trashv
+	else
+	map_in_1	\1
+	Xcall	SysBeep
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+;OSSoundDispatch:	 macro	 *selector
+;	 if 68k
+;	 clr.w	 -(sp)
+;	 move.l	\1,d0
+;	 dc.w	 _SoundDispatch
+;	 move.w	(sp)+,\2
+;	 else
+;	 mr	r3,\1
+;	 Xcall	 SoundDispatch
+;	 cmpwi	 r3,0
+;	 mr	\2,r3
+;	 endif
+;	 endm
+
+OSSoundRecordToFile:	macro	*filter proc,corner,quality,frefnum(regs)
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)	*point
+	move.l	\3,-(sp)
+	move.w	\4,-(sp)
+	move.l	#$07080014,d0
+	dc.w	_sounddispatch
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	SndRecordToFile
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+OSSndStartFilePlay:	macro
+	macs_last
+	if	68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)		*Channel
+	move.w	\2,-(sp)	*file
+	move.w	\3,-(sp)	*no res
+	move.l	\4,-(sp)		*buffer size
+	move.l	\5,-(sp)			*The buffer
+	move.l	\6,-(sp)			*Selection pointer
+	move.l	\7,-(sp)	*Completion
+	move.b	\8,-(sp)		      	      *ASync
+	move.l	#0x0D000008,d0
+	dc.w	_sounddispatch
+	move.w	(sp)+,\9
+	else
+	map_in_8	\1,\2,\3,\4,\5,\6,\7,\8
+	Xcall	SndStartFilePlay
+	cmpwi	r3,0
+	map_out	\9
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSndNewChannel:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)	*sampled sound
+	move.l	\3,-(sp)	*Stereo
+	move.l	\4,-(Sp)	*no callback
+	dc.w	_SndNewChannel
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	SndNewChannel
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSndChannelStatus:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*The channel
+	move.w	\2,-(sp)	*size of \3
+	move.l	\3,-(sp)	*ptr to buffer
+	move.l	#$00100008,d0
+	dc.w	_sounddispatch
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SndChannelStatus
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSSndDoImmediate:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_SndDoImmediate
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	SndDoImmediate
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSndPlay:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.b	\3,-(sp)
+	dc.w	_SndPlay
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SndPlay
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+***********************QUICKDRAW************************
+OSGetMainDevice:	macro		; returns 
+	macs_last
+	if 68k
+	subq.w	#4,sp
+	dc.w	_GetMainDevice
+	trashv
+	move.l	(sp)+,\1
+	else
+	Xcall	GetMainDevice
+	trash45
+	map_out \1
+	endif
+	macs_first		* back to translate mode
+	endm
+
+OSHasDepth:		macro		; gdh,depth,whichFlags,flags returns int16 
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	;handle to gdevice
+	move.w	\2,-(sp)	;wanted depth
+	move.w	\3,-(sp)	;whichflags to check
+	move.w	\4,-(sp)	;flags
+	move.b	#0x14,d0		;hasdepth selector
+	dc.w	0xaaa2		;palette dispatch
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	HasDepth
+	trash45
+	map_out	\5
+	endif
+	macs_first		* back to translate mode
+	endm
+
+OSSetDepth:		macro		; gdh,depth,whichFlags,flags returns int16 
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	;handle to gdevice
+	move.w	\2,-(sp)	;wanted depth
+	move.w	\3,-(sp)	;whichflags to check
+	move.w	\4,-(sp)	;flags
+	move.b	#0x13,d0		;setdepth selector
+	dc.w	0xaaa2		;palette dispatch
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	SetDepth
+	trash45
+	map_out	\5
+	endif
+	macs_first		* back to translate mode
+	endm
+
+
+OSRectRgn:		macro		; region handle,rect 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_RectRgn
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	RectRgn
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+
+
+OSSetEmptyRgn:		macro		; region handle 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_SetEmptyRgn
+	trashv
+	else
+	map_in_1	\1
+	Xcall	SetEmptyRgn
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+
+
+
+
+OSUnionRgn:		macro		; region handle 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	dc.w	_UnionRgn
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	UnionRgn
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+
+OSDiffRgn:		macro		; region handle 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	dc.w	_DiffRgn
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	DiffRgn
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+
+OSGetWMgrPort:	macro	*Where
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GetWMgrPort
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetWMgrPort
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetCWMgrPort:	macro	*Where
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GetCWMgrPort
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetCWMgrPort
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+
+OSPaintOne:		macro 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_PaintOne
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	PaintOne
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+OSPaintBehind:		macro 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_PaintBehind
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	PaintBehind
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+OSCalcVis:		macro 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_CalcVis
+	trashv
+	else
+	map_in_1	\1
+	Xcall	CalcVis
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+OSCalcVisBehind:		macro 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	0xa90a
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	CalcVisBehind
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+
+OSFillRgn:		macro 
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_FillRgn
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	FillRgn
+	trash45
+	endif
+	macs_first		* back to translate mode
+	endm
+
+
+OSPenPat:	macro	*pat ptr (reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_PenPat
+	trashv
+	else
+	map_in_1	\1
+	Xcall	PenPat
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSRandom:	macro	*return (reg)
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	dc.w	_Random
+	trashv
+	move.w	(sp)+,\1
+	else
+	Xcall	Random
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSInsetRect:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	dc.w	_InsetRect
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	InsetRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetRect:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	move.w	\4,-(sp)
+	move.w	\5,-(sp)				
+	dc.w	_SetRect
+	trashv
+	else
+	map_in_5	\1,\2,\3,\4,\5
+	Xcall	SetRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPenSize:	macro
+	macs_last
+	if 68k
+	move.w	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_PenSize
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	PenSize
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSInvalRect:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_InvalRect
+	trashv
+	else
+	map_in_1	\1
+	Xcall	InvalRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+
+
+OSEraseRgn:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_EraseRgn
+	trashv
+	else
+	map_in_1	\1
+	Xcall	EraseRgn
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm	
+
+
+OSScrollRect:	macro	*therect,distH,distV,updatergn
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	move.l	\4,-(sp)
+	dc.w	_ScrollRect
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	ScrollRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetPen:	macro	*ptr (reg) to where info to go
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GetPen
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetPen
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSValidRect:	macro	*reg ptr to rect
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_ValidRect
+	trashv
+	else
+	map_in_1	\1
+	Xcall	ValidRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSPaintRect:	macro
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_PaintRect
+	trashv
+	else
+	map_in_1	\1
+	Xcall	PaintRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSGetFontInfo:	macro	*reg where
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GetFontInfo
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetFontInfo
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSStringWidth:	macro
+	macs_last
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	dc.w	_StringWidth
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	StringWidth
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetColor:	macro
+	macs_last
+	if 68k
+	clr.b	-(sp)
+	move.l	\1,-(sp)	*where
+	move.l	\2,-(sp)	*prompt
+	move.l	\3,-(sp)	*in color
+	move.l	\4,-(sp)	*outcolor
+	move.w	#9,-(sp)
+	dc.w	0xa82e
+	trashv
+	clr.l	\5
+	move.b	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	GetColor
+	trash45
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPenMode:	macro	*mode(reg)
+	macs_last
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_PenMode
+	trashv
+	else
+	map_in_1	\1
+	Xcall	PenMode
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFrameRect:	macro	*rect ptr(reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_FrameRect
+	trashv
+	else
+	map_in_1	\1
+	Xcall	FrameRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSInvertRect:	macro	*(reg) ptr to rect
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_InvertRect
+	trashv
+	else
+	map_in_1	\1
+	Xcall	InvertRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDrawString:	macro	*\1=string ptr (reg)
+	macs_last
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_DrawString
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DrawString
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDrawChar:	macro	*\1=char (reg)
+	macs_last
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_DrawChar
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DrawChar
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSTextFont:	macro	*font - reg
+	macs_last
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_TextFont
+	trashv
+	else
+	map_in_1	\1
+	Xcall	TextFont
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSTextSize:	macro	*size - reg
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_TextSize
+	trashv
+	else
+	map_in_1	\1
+	Xcall	TextSize
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm	
+	
+OSTextMode:	macro	*pen mode - reg
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_TextMode
+	trashv
+	else
+	map_in_1	\1
+	Xcall	TextMode
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm	
+
+OSTextFace:	macro	*0=normal, 1=bold, 2=italic, 4=underscore, 8=outlined, 16=shadowed, 32= condensed, 64= expanded
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	0xa888
+	trashv
+	else
+	map_in_1	\1
+	Xcall	TextFace
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm	
+
+
+OSRealFont:	macro	*font - reg, size - reg
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	clr.b	-(sp)
+	move.w	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_RealFont
+	trashv
+	move.b	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	RealFont
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFontMetrics:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	0xa835
+	trashv
+	else
+	map_in_1	\1
+	Xcall	FontMetrics
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm	
+
+
+OSGlobalToLocal:	macro	*rect ptr (reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GlobalToLocal
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GlobalToLocal
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSLocalToGlobal:	macro	*rect ptr (reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_LocalToGlobal
+	trashv
+	else
+	map_in_1	\1
+	Xcall	LocalToGlobal
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSPtInRect:	macro	*point,rect ptr,result(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	CLR.B	-(SP)
+	MOVE.L	\1,-(SP)
+	move.l	\2,-(sp)
+	DC.W	_PTINRECT
+	trashv
+	MOVE.B	(SP)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	PtInRect
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetPort:	macro	*Where
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GetPort
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetPort
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetPort:	macro	*Where
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_SetPort
+	trashv
+	else
+	ifeq	CARBON
+	map_in_1	\1
+	Xcall	SetPort
+	trash45
+	else
+	map_in_1	\1
+	Xcall	SetPortWindowPort	;carbon accessors
+	trash45
+
+	endif
+	
+	endif
+	macs_first	  *back to translate mode
+	endm	
+
+OSEraseRect:	macro	*\1=ptr to rect
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_EraseRect
+	trashv
+	else
+	map_in_1	\1
+	Xcall	EraseRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSRGBForeColor:	macro	*\1=ptr to rect
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_RGBForeColor
+	trashv
+	else
+	map_in_1	\1
+	Xcall	RGBForeColor
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSRGBBackColor:	macro	*\1=ptr to rect
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_RGBBackColor
+	trashv
+	else
+	map_in_1	\1
+	Xcall	RGBBackColor
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMoveTo:	macro	*x,y
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_MoveTo
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	MoveTo
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMove:	macro	*x,y
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_Move
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	Move
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+	
+OSLineTo:	macro	*x,y
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_LineTo
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	LineTo
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNewRgn:	macro	*result ptr
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	dc.w	_NewRgn
+	trashv
+	move.l	(sp)+,\1
+	else
+	Xcall	NewRgn
+	trash45
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisposeRgn:	macro	*result ptr
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_DisposeRgn
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DisposeRgn
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSGetClip:	macro	*ptr to valid rgn
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GetClip
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetClip
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSSetClip:	macro	*ptr to valid rgn
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_SetClip
+	trashv
+	else
+	map_in_1	\1
+	Xcall	SetClip
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSClipRect:	macro	*\1=ptr to rect in reg
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_ClipRect
+	trashv
+	else
+	map_in_1	\1
+	Xcall	ClipRect
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSSetCCursor:	macro	*handle
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_SetCCursor
+	trashv
+	else
+	map_in_1	\1
+	Xcall	SetCCursor
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetCCursor:	macro	*handle
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	MOVE.W	\1,-(SP)
+	DC.W	_GetCCursor
+	trashv
+	MOVE.L	(SP)+,\2
+	else
+	map_in_1	\1
+	Xcall	GetCCursor
+	trash45
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSGestalt:	macro	*selector, where,OSerr
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","D0"
+	move.l	\1,d0
+	endif
+	ifnc	"\2","A1"
+	move.l	\2,a1
+	endif
+	dc.w	0xa1ad	*Gestalt
+	move.l	a0,(a1)	*glue
+	ifnc	"\3","D0"
+	move.l	d0,\3
+	endif
+
+	else
+
+	map_in_2	\1,\2
+	Xcall	Gestalt
+	trash45
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+********************************GWORLDS********************************
+* PixMap Record
+pmBaseAddr:	EQU		0
+pmRowBytes:	EQU		4
+pmBounds:	EQU		6
+pmVersion:	EQU		14
+pmPackType:	EQU		16
+pmPackSize:	EQU		18
+pmHRes:		EQU		22
+pmVRes:		EQU		26
+pmPixelType:	EQU		30
+pmPixelSize:	EQU		32
+pmCmpCount:	EQU		34
+pmCmpSize:	EQU		36
+pmPlaneBytes:	EQU  38
+pmTable:		EQU		42
+pmReserved:	EQU		46
+
+
+_QDExtensions	EQU	$ab1d
+	ifnd	PortBits
+PortBits:	EQU	2	
+	endif						; really part of GrafPtr struct type
+	ifnd	portRect
+portRect:	EQU	16
+	endif
+	ifnd	srcCopy
+srcCopy:		EQU 0
+	endif
+
+OSNewGWorld:	MACRO
+	macs_last	*avoid clashes with real instructions
+			if	68k
+				subq.w	#2,sp		; result space
+				move.l	\1,-(sp)	; to be pointer to the GWorld
+				move.w	\2,-(sp)	; the depth wanted
+				move.l	\3,-(sp)	; the bounds rectangle
+				move.l	\4,-(sp)	; handle to ctable to use
+				move.l	\5,-(sp)	; using old gdevice? no.
+				move.l	\6,-(sp)	; the flags
+				move.l	#$00160000,d0
+				dc.w		$ab1d
+				trashv
+				move.w	(sp)+,\7
+			else
+				map_in_6	\1,\2,\3,\4,\5,\6
+				Xcall	NewGWorld
+	trash45
+				cmpwi	r3,0
+	map_out	\7
+			endif
+	macs_first	  *back to translate mode
+			ENDM
+
+OSGetGWorld:	MACRO
+	macs_last	*avoid clashes with real instructions
+			if	68k
+				move.l	\1,-(sp)
+				move.l	\2,-(sp)
+				move.l	#$00080005,d0
+				dc.w		$ab1d
+				trashv
+			else
+				map_in_2	\1,\2
+				Xcall	GetGWorld
+	trash45
+			endif
+			macs_first	  *back to translate mode
+			ENDM
+
+OSSetGWorld:	MACRO
+	macs_last	*avoid clashes with real instructions
+			if	68k
+				move.l	\1,-(sp)
+				move.l	\2,-(sp)
+				move.l	#$00080006,d0
+				dc.w		$ab1d
+			trashv
+			else
+				map_in_2	\1,\2
+				Xcall	SetGWorld
+	trash45
+			endif
+	macs_first	  *back to translate mode
+			ENDM
+
+OSGetGWorldPixMap:	MACRO
+	macs_last	*avoid clashes with real instructions
+					if	68k
+						lea -4(sp),sp
+						move.l	\1,-(sp)
+						move.l	#$00040017,d0
+						dc.w		$ab1d	; _GetGWorldPixMap
+					trashv
+						move.l	(sp)+,\2
+					else
+						map_in_1	\1
+						Xcall	GetGWorldPixMap
+	trash45
+						cmpwi	r3,0
+						map_out	\2
+					endif
+	macs_first	*back to translate mode
+					ENDM
+					
+OSLockPixels:	MACRO
+	macs_last	*avoid clashes with real instructions
+				if	68k
+					subq.l	#2,sp
+					move.l	\1,-(sp)
+					move.l	#$00040001,d0
+					dc.w		$ab1d	; _LockPixels					
+					trashv
+					move.w	(sp)+,\2
+				else
+					map_in_1	\1
+					Xcall	LockPixels
+	trash45
+					cmpwi	r3,0
+	map_out	\2
+				endif
+	macs_first	  *back to translate mode
+				ENDM
+
+OSDisposeGWorld:	MACRO
+	macs_last	*avoid clashes with real instructions
+			if	68k
+				move.l	\1,-(sp)
+				move.l	#$00040004,d0
+				dc.w		$ab1d
+			trashv
+			else
+				map_in_1	\1
+				Xcall	DisposeGWorld
+	trash45
+			endif
+	macs_first	  *back to translate mode
+			ENDM
+
+OSCopyBits:	MACRO
+	macs_last	*avoid clashes with real instructions
+			if	68k
+				move.l		\1,-(sp)
+				move.l		\2,-(sp)
+				move.l		\3,-(sp)
+				move.l		\4,-(sp)
+				move.w	\5,-(sp)
+				move.l	\6,-(sp)				
+				dc.w	_CopyBits
+			trashv
+			else
+				map_in_6	\1,\2,\3,\4,\5,\6
+				Xcall	CopyBits
+	trash45
+			endif
+	macs_first	  *back to translate mode
+			ENDM
+
+OSUnlockPixels:	MACRO
+	macs_last	*avoid clashes with real instructions
+				if	68k
+					move.l	\1,-(sp)
+					move.l	#$00040002,d0
+					dc.w		$ab1d	; _UnLockPixels					
+				trashv
+				else
+					map_in_1	\1
+					Xcall	UnlockPixels
+	trash45
+				endif
+	macs_first	  *back to translate mode
+				ENDM
+
+OSGetPixBaseAddr:	MACRO
+					if	68k
+						lea	-4(sp),sp
+						move.l	\1,-(sp)
+						move.l	#$0004000F,d0
+						dc.w		$ab1d	*QDExtensions
+						move.l	(sp)+,\2
+					trashv
+					else
+						map_in_1	\1
+						Xcall	GetPixBaseAddr
+	trash45
+						map_out	\2
+					endif
+					endm
+					
+OSGetCTable:	MACRO	id, returns handle in \2
+				macs_last
+				if	68k
+				lea	-4(sp),sp				; result space
+				move.w	\1,-(sp)			; clut ID
+				dc.w	_GetCTable
+				trashv
+				move.l	(sp)+,\2			; a CtabHandle
+				else
+				map_in_1	\1
+				Xcall	GetCTable
+		trash45
+			map_out	\2
+				endif		
+				macs_first
+				ENDM
+
+*******************************WINDOWS*********************************
+OSSetWTitle:	macro	*window,title ptr
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_SetWTitle
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	SetWTitle
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGrowWindow:	macro	*window,mouse coords,rect ptr,result
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp	*space for return
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	dc.w	_GrowWindow
+	trashv
+	move.l	(Sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GrowWindow
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSCloseWindow:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_CloseWindow
+	trashv
+	else
+	map_in_1	\1
+	Xcall	CloseWindow
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSHideWindow:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_HideWindow
+	trashv
+	else
+	map_in_1	\1
+	Xcall	HideWindow
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSGetWTitle:	macro	*window,ptr
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_GetWTitle
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	GetWTitle
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetAuxWin:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	clr.b	-(sp)
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_GetAuxWin
+	trashv
+	move.b	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	GetAuxWin
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSSelectWindow:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_SelectWindow
+	trashv
+	else
+	map_in_1	\1
+	Xcall	SelectWindow
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSZoomWindow:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(Sp)
+	move.w	\2,-(sp)
+	move.b	\3,-(sp)
+	dc.w	_ZoomWindow
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	ZoomWindow
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisposeWindow:	macro	*window
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_DisposeWindow
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DisposeWindow
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSTrackGoAway:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	clr.b	-(sp)
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_TrackGoAway
+	trashv
+	move.b	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	TrackGoAway
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSTrackBox:	macro	*window,coords,part,result
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	clr.b	-(sp)
+	move.l	\1,-(sp)	*window
+	move.l	\2,-(sp)	*mouse coords
+	move.w	\3,-(sp)	*part code
+	dc.w	_TrackBox
+	trashv
+	move.b	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	TrackBox
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFindWindow:	macro	*mouse coords(reg),window_ptr,return (reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp	;RETURN DATA
+	MOVE.L	\1,-(SP)	*MOUSE COORDS
+	move.l	\2,-(sp)				*WE WANT WINDOW PTR (IF ANY) HERE
+	DC.W	_FINDWINDOW
+	trashv
+	clr.l	\3
+	MOVE.W	(SP)+,\3	*WINDOWLOC
+
+	else
+	map_in_2	\1,\2
+	Xcall	FindWindow
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFrontWindow:	macro	*whichwindow (reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	dc.w	_FrontWindow
+	trashv
+	move.l	(sp)+,\1
+	else
+	Xcall	FrontWindow
+	trash45
+	cmpwi	r3,0
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDragWindow:	macro	*thewindow,startpoint,limitrect
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	MOVE.L	\1,-(SP)	WHICHWINDOW
+	MOVE.L	\2,-(SP)	MOUSE COORDS
+	move.l	\3,-(sp)
+	DC.W	$A925	DRAGWINDOW
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	DragWindow
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMoveWindow:	macro	*thewindow(reg),hglobal(reg),vglobal(reg),Kfront
+	macs_last	*avoid clashes with real instructions
+
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	move.b	\4,-(sp)
+	dc.w	_MoveWindow
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	MoveWindow
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSizeWindow:	macro	*window,wide(reg),high(reg),updateflag
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	move.b	\4,-(sp)
+	dc.w	_SizeWindow
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	SizeWindow
+	trash45
+	
+	endif
+	macs_first	  *back to translate mode
+	endm
+					
+OSGetNewCWindow:	macro	*window ID, record, behind, result
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.w	\1,-(sp)	*wind ID
+	move.l	\2,-(sp)	*record goes here
+	move.l	\3,-(sp)	*behind which window? (-1=none)
+	dc.w	_GetNewCWindow
+	trashv
+	move.l	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetNewCWindow
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSNewCWindow:	macro	*window record, bounds, title, visflg, wdefprocID,behind,goawayflg,refCon
+	macs_last	*avoid clashes with real instructions
+	if 68k
+		subq.l	#4,sp		; result space (window pointer)
+		move.l	\1,-(sp)	; wstorage (where do I put the window?)
+		move.l	\2,-(sp)	; boundary rectangle
+		move.l	\3,-(sp)	; the title
+		move.b	\4,-(sp)	; the visible flag
+		move.w	\5,-(sp)	; the window type	
+		move.l	\6,-(sp)	; behind what window? -1=front NIL=at back
+		move.b	\7,-(sp)	; close box flag
+		move.l	\8,-(sp)	; refcon				
+		dc.w	_NewCWindow
+		trashv
+		move.l	(sp)+,\9	; returns window pointer
+	else
+		map_in_8	\1,\2,\3,\4,\5,\6,\7,\8
+		Xcall	NewCWindow
+	trash45
+		map_out	\9
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSShowWindow:	macro	*window
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_ShowWindow
+	trashv
+	else
+	map_in_1	\1
+	Xcall	ShowWindow
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+*****************************MOUSE*******************************
+OSStillDown:	macro	*reg for return
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	clr.b	-(sp)
+	dc.w	_StillDown
+	trashv
+	move.b	(sp)+,\1
+	else
+	Xcall	StillDown
+	trash45
+	cmpwi	r3,0
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm		
+
+OSButton:	macro
+	macs_last	*avoid clashes with real instructions
+	if	68k
+	clr.b	-(sp)
+	dc.w	_Button
+	trashv
+	move.b	(sp)+,\1
+	else
+	Xcall	Button
+	trash45
+	cmpwi	r3,0
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSGetMouse:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_GetMouse
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetMouse
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+
+**********************************CONTROLS**************************
+OSNewControl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.l	\1,-(sp)	*windowptr
+	move.l	\2,-(sp)			*ctrlrect
+	move.l	\3,-(sp)	*title
+	MOVE.B	\4,-(SP)	*visible
+	move.w	\5,-(sp)	*initial value
+	move.w	\6,-(sp)	*min
+	move.w	\7,-(sp)	*max
+	MOVE.W	\8,-(SP)	*ctrl type
+	clr.l	-(sp)	 	*refcon - not used
+	DC.W	_NEWCONTROL
+	trashv
+	move.l	(sp)+,\9		*return
+	else
+	map_in_8	\1,\2,\3,\4,\5,\6,\7,\8
+	Xcall	NewControl
+	trash45
+	map_out	\9
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSTrackControl:	macro	*ctlhandle,mouse pos,callback,result
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*window
+	move.l	\2,-(sp)	*mouse coords
+	move.l	\3,-(sp)	*part code
+	dc.w	_TrackControl
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	TrackControl
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSSetMaxCtl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_SetMaxCtl
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	SetControlMaximum
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetCTitle:	macro
+	 	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_SetCTitle
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	SetControlTitle
+	trash45
+	endif
+	 	   
+	endm
+
+
+OSHideControl:	macro	*control	reg
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_HideControl
+	trashv
+	else
+	map_in_1	\1
+	Xcall	HideControl
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMoveControl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	dc.w	_MoveControl
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	MoveControl
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSizeControl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	move.w	\3,-(sp)
+	dc.w	_SizeControl
+	trashv
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SizeControl
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetCtlValue:	macro	\1=handle,\2=return reg
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	trashv
+	dc.w	_GetCtlValue
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	GetControlValue
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFindControl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	MOVE.L	\1,-(SP)	*WHERE(LOCAL)
+	MOVE.L	\2,-(SP)	*theWindow
+	move.l	\3,-(sp)				*whichCtl
+	DC.W	_FINDCONTROL
+	trashv
+	MOVE.W	(SP)+,\4	*WHICH PART OF SCROLL BAR
+
+	else
+	map_in_3	\1,\2,\3
+	Xcall	FindControl
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSetCtlValue:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)	*item
+	move.w	\2,-(sp)	*value
+	dc.w	_SetCtlValue
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	SetControlValue
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSShowControl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_ShowControl
+	trashv
+	else
+	map_in_1	\1
+	Xcall	ShowControl
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSDraw1Control:	macro	\1=control (reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_Draw1Control
+	trashv
+	else
+	map_in_1	\1
+	Xcall	Draw1Control
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+		
+OSHiliteControl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_HiliteControl
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	HiliteControl
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+		
+******************************RESOURCES******************************	
+OSAddResource:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	MOVE.L	\1,-(SP)	HANDLE
+	MOVE.L	\2,-(SP)	TYPE	
+	MOVE.W	\3,-(SP)	ID
+	MOVE.L	\4,-(SP)	NAME
+	DC.W	_ADDRESOURCE	 A9AB
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	AddResource
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSResError:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	dc.w	_ResError
+	trashv
+	move.w	(sp)+,\1
+	else
+	Xcall	ResError
+	trash45
+	cmpwi	r3,0
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSUseResFile:	macro	*reg=resfile
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_UseResFile
+	trashv
+	else
+	map_in_1	\1
+	Xcall	UseResFile
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSUpdateResFile:	macro	*reg=resfile
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)	*resfile
+	dc.w	_UpdateResFile
+	trashv
+	else
+	map_in_1	\1
+	Xcall	UpdateResFile
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSWriteResource:	macro	*reg=resource
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_WriteResource
+	trashv
+	else
+	map_in_1	\1
+	Xcall	WriteResource
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSChangedResource:	macro	*reg=resource
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_ChangedResource
+	trashv
+	else
+	map_in_1	\1
+	Xcall	ChangedResource
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSRemoveResource:	macro	*reg=resource
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_RemoveResource
+	trashv
+	else
+	map_in_1	\1
+	Xcall	RemoveResource
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSCurResFile:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	dc.w	_CurResFile
+	trashv
+	move.w	(sp)+,\1
+	else
+	Xcall	CurResFile
+	trash45
+	cmpwi	r3,0
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSCloseResFile:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	\1,-(sp)
+	dc.w	_CloseResFile
+	trashv
+	else
+	map_in_1	\1
+	Xcall	CloseResFile
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSGet1NamedResource:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp	;SPACE FOR HANDLE RETURN
+	MOVE.L	\1,-(SP)	TYPE
+	MOVE.L	\2,-(SP)	OUR NAME
+	DC.W	_Get1NamedResource	
+	trashv
+	MOVE.L	(SP)+,\3	GET HANDLE
+
+	else
+	map_in_2	\1,\2
+	Xcall	Get1NamedResource
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGet1IndResource:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.l	\1,-(sp)		
+	move.w	\2,-(sp)
+	dc.w	_Get1IndResource
+	trashv
+	move.l	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	Get1IndResource
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGet1IndType:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)		
+	move.w	\2,-(sp)
+	dc.w	_Get1IndType
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	Get1IndType
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetResInfo:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)	*res handle	
+	move.l	\2,-(sp)	*ptr to res ID
+	move.l	\3,-(sp)	*ptr to res type
+	move.l	\4,-(sp)	*ptr to res name
+	dc.w	_GetResInfo
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	GetResInfo
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetString:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.w	\1,-(sp)
+	dc.w	_getstring			*From system
+	trashv
+	move.l	(sp)+,\2			*handle to string
+
+	else
+	map_in_1	\1
+	Xcall	GetString
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+OSGet1Resource:	macro	*type(reg),ID(reg), return(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_Get1Resource
+	trashv
+	move.l	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	Get1Resource
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetResource:	macro	*type(reg),ID(reg), return(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)
+	dc.w	_GetResource
+	trashv
+	move.l	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	GetResource
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSReleaseResource:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_ReleaseResource
+	trashv
+	else
+	map_in_1	\1
+	Xcall	ReleaseResource
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSDetachResource:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_DetachResource
+	trashv
+	else
+	map_in_1	\1
+	Xcall	DetachResource
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+********************************EVENTS****************************
+OSFlushEvents:	macro	*reg mask)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","D0"
+	move.w	\1,d0
+	endif
+	ifnc	"\2","D1"
+	move.w	\2,d1
+	endif
+	and.l	#$0000FFFF,d0
+	and.l	#$0000FFFF,d1
+	swap	d1
+	or.l	d1,d0
+	dc.w	_FlushEvents
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	FlushEvents
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSWaitNextEvent:	macro	*mask,eventrecord,time,mouse rgn (all reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	clr.b	-(sp)
+	move.w	\1,-(sp)	*mask
+	move.l	\2,-(sp)	*event record
+	move.l	\3,-(sp)	*sleep
+	move.l	\4,-(sp)	*rgn
+	dc.w	_WaitNextEvent
+	trashv
+	move.b	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	WaitNextEvent
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSBeginUpdate:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_BeginUpdate
+	trashv
+	else
+	map_in_1	\1
+	Xcall	BeginUpdate
+	trash45
+	endif
+	endm
+
+OSEndUpdate:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	dc.w	_EndUpdate
+	trashv
+	else
+	map_in_1	\1
+	Xcall	EndUpdate
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetKeys:	macro
+	macs_last	*avoid clashes with real instructions
+	if	68k
+	move.l	\1,-(sp)
+	dc.w	0xa976
+	trashv
+	else
+	map_in_1	\1
+	Xcall	GetKeys
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+************************************FILES******************************
+
+OSPBGetVInfoSync:	macro	*reg->PB
+	 	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	0xa007	*getvinfosync
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBGetVInfoSync	
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	 	   
+	endm
+
+OSFindFolder:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp	;OSerr
+	MOVE.W	\1,-(SP)	VREFNUM
+	MOVE.L	\2,-(SP)
+	move.b	\3,-(SP)
+	move.l	\4,-(sp)
+	move.l	\5,-(sp)
+	MOVEQ	#0,D0
+	DC.W	_FINDFOLDER
+	trashv
+	MOVE.W	(SP)+,\6	ERROR
+
+	else
+	map_in_5	\1,\2,\3,\4,\5
+	Xcall	FindFolder
+	trash45
+	cmpwi	r3,0
+	map_out	\6
+	endif
+	macs_first	  *back to translate mode
+	endm
+OSMakeFSspec:	macro	*vref,dirid,name,fsspecptr,output
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.w	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	move.l	\4,-(sp)
+	moveq	#1,d0
+	dc.w	0xaa52
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	FSMakeFSSpec
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSPBGetCatInfoSync:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	moveq	#9,d0
+	dc.w	_HFSDispatch
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBGetCatInfoSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBDirCreateSync:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	moveq	#6,d0
+	dc.w	_HFSDispatch
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBDirCreateSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSPBHGetVInfoSync:	macro	*reg->PB
+	 	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_HGetVInfo
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBHGetVInfoSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	 	   
+	endm
+
+OSPBUnmountVol:	macro	*reg->PB
+	 	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_UnmountVol
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBUnmountVol
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	 	   
+	endm
+
+
+OSPBGetVolSync:	macro	*reg->PB
+	 	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_GetVol
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBGetVolSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	 	   
+	endm
+
+
+OSPBDTGetPath:	macro	*reg of pb,where result to go
+	 	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	moveq	#0x20,d0
+	dc.w	_HFSDispatch
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBDTGetPath
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	 	   
+	endm
+
+OSPBDTGetAPPLSync:	macro	*reg of pb,where result to go
+	 	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	moveq	#0x27,d0
+	dc.w	_HFSDispatch
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBDTGetAPPLSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	 	   
+	endm
+
+
+OSPBGetEOF:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_GetEOF
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBGetEOFSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBSetEOF:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_SetEOF
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBSetEOFSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBOpen:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_Open
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBOpenSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBWrite:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_Write
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBWriteSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+OSPBRead:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_Read
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBReadSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBClose:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_Close
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBCloseSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBFlushVol:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_FlushVol
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBFlushVolSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSPBHSetVolSync:	macro	*reg->PB
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_HSetVol	
+	trashv
+	else
+	map_in_1	\1
+	Xcall	PBHSetVolSync
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBHOpenDFSync:	macro	*reg of pb,where result to go
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	move.w	#$1a,d0	*_PBHopenDFSync	
+	dc.w	_hfsdispatch
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+
+	else
+	map_in_1	\1
+	Xcall	PBHOpenDFSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFSpDirCreate:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)	*System script pse
+	move.l	\3,-(sp)	*Directory ID here
+	move.w	#5,d0
+	dc.w	_highlevelFSdispatch	*Fspdircreate
+	trashv
+	move.w	(sp)+,\4
+
+	else
+	map_in_3	\1,\2,\3
+	Xcall	FSpDirCreate
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSFSpRename:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*FSspec
+	move.l	\2,-(sp)	*where info to go
+	moveq	#0xb,d0		*rename
+	dc.w	_highlevelFSdispatch
+	trashv
+	move.w	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	FSpRename
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFSpGetFInfo:	macro	*fsspec(reg),info here(reg),return error(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	moveq	#7,d0
+	dc.w	_HighLevelFSDispatch
+	trashv
+	move.w	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	FSpGetFInfo
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSFSpDelete:	macro	*fsspec(reg),return error(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	moveq	#6,d0
+	dc.w	_HighLevelFSDispatch
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	FSpDelete
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+	
+OSFSpSetFInfo:	macro	*fsspec(reg),info here(reg),return error(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	moveq	#8,d0
+	dc.w	_HighLevelFSDispatch
+	trashv
+	move.w	(sp)+,\3
+	else
+	map_in_2	\1,\2
+	Xcall	FSpSetFInfo
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSFSpOpenDF:	macro	*fsspec(reg),permission,file ref(ptr reg),return error(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.b	\2,-(sp)
+	move.l	\3,-(sp)
+	moveq	#2,d0
+	dc.w	_HighLevelFSDispatch
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	FSpOpenDF
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFSpOpenRF:	macro	*fsspec(reg),permission,file ref(ptr reg),return error(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.b	\2,-(sp)
+	move.l	\3,-(sp)
+	moveq	#3,d0
+	dc.w	_HighLevelFSDispatch
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	FSpOpenRF
+	trash45
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFSpOpenResFile:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.b	\2,-(sp)	*permission
+	move.w	#$d,d0
+	dc.w	_highlevelFSdispatch	*Fspopenresfile	
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	FSpOpenResFile
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSFSpCreate:	macro	*fsspec(reg),creator,filetype,script,return error(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	move.w	\4,-(sp)	*script
+	moveq	#4,d0
+	dc.w	_HighLevelFSDispatch
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	FSpCreate
+	cmpwi	r3,0
+	trash45
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFSpCreateResFile:	macro	*fsspec(reg),creator,filetype,return error(reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	move.w	\4,-(sp)	*script
+	moveq	#0xE,d0
+	dc.w	_HighLevelFSDispatch
+	trashv
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	FSpCreateResFile
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBHGetFInfo:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_HGetFileInfo
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBHGetFInfoSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPBHSetFInfo:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_HSetFileInfo
+	trashv	d0
+	ifnc	"\2","D0"
+	move.l	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBHSetFInfoSync
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+***************************ICONS*******************************
+
+OSGetCIcon:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.w	\1,-(sp)
+	dc.w	_GetCIcon
+	trashv
+	move.l	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	GetCIcon
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetIconSuite:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	\2,-(sp)	*Res ID
+	move.l	\3,-(sp)	*Get all icons in family?
+	move.w	#0x501,d0
+	dc.w	_IconDispatch	*GetIConSuite
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetIconSuite
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPlotCIcon:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	dc.w	_PlotCIcon
+	trashv
+	else
+	map_in_2	\1,\2
+	Xcall	PlotCIcon
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSPlotIconSuite:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*rectangle
+	move.w	\2,-(sp)	*alignment
+	move.w	\3,-(sp)	*transform
+	move.l	\4,-(Sp)	*icon_h
+	move.w	#0x603,d0
+	dc.w	_IconDispatch
+	trashv
+	move.w	(sp)+,\5	*return
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	PlotIconSuite
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisposeIconSuite:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*icon_h
+	move.b	\2,-(Sp)	*dispose handle?
+	move.w	#0x302,d0
+	dc.w	_IconDispatch
+	trashv
+	move.w	(sp)+,\3	*return
+	else
+	map_in_2	\1,\2
+	Xcall	DisposeIconSuite
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+*******************************ALIAS*******************************
+
+OSNewAlias:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*relative to (Fsspec or zero)
+	move.l	\2,-(sp)	*FSspec of file
+	move.l	\3,-(sp)	*data returned here
+	moveq	#2,d0
+	dc.w	_AliasDIspatch
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	NewAlias
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSResolveAlias:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*Non relative
+	move.l	\2,-(sp)	*handle to alias
+	move.l	\3,-(sp)	*The fsspec returned here
+	move.l	\4,-(sp)	*Was changed?
+	moveq	#3,d0		*Selector - resolve alias
+	dc.w	_aliasdispatch	
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	ResolveAlias
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSMatchAlias:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*ptr to fsspec (for relative else zero)
+	move.l	\2,-(sp)	*Rules mask - IM FIles 4-20
+	move.l	\3,-(sp)	*alias handle
+	move.l	\4,-(sp)	*ptr to int16 - how many matches
+	move.l	\5,-(sp)	*ptr to returned fsspec(s)
+	move.l	\6,-(sp)	*ptr to int8 - was changed flag
+	move.l	\7,-(sp)	*Alias user Filter func.
+	move.l	\8,-(sp)	*user data for filter func.
+	moveq	#5,d0
+	dc.w	_AliasDispatch
+	trashv
+	move.w	(sp)+,\9
+	else
+	map_in_8	\1,\2,\3,\4,\5,\6,\7,\8
+	Xcall	MatchAlias
+	trash45
+	cmpwi	r3,0
+	map_out	\9
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetAliasInfo:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(Sp)	*alias
+	move.w	\2,-(sp)	*zero-get name
+	move.l	\3,-(sp)
+	moveq	#7,d0			*Selector - get info
+	dc.w	_aliasdispatch	*GEtAliasInfo
+	trashv
+	move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetAliasInfo
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSUpdateAlias:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(Sp)	*from file
+	move.l	\2,-(sp)	*new fsspec
+	move.l	\3,-(sp)	*handle to alias
+	move.l	\4,-(sp)	*ptr to was changed byte
+	moveq	#6,d0			*Selector - update alias
+	dc.w	_aliasdispatch	*UpdateAlias
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	UpdateAlias
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+*******************************SCRAP*******************************
+OSZeroScrap:	macro	*return (reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	dc.w	_ZeroScrap
+	trashv
+	move.l	(sp)+,\1
+	else
+	Xcall	ZeroScrap
+	trash45
+	cmpwi	r3,0
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSPutScrap:	macro	*all reg - length,type,srcptr
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.w	\1,-(sp)
+	clr.w	-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	dc.w	_PutScrap
+	trashv
+	move.l	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	PutScrap
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetScrap:	macro	*all reg - handle,type,scrapoffset(ptr),return length - all reg
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#4,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	dc.w	_GetScrap
+	trashv
+	move.l	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	GetScrap
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+***********************DISK INIT*******************************
+OSDILoad:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	#2,-(sp)
+	dc.w	_pack2		*diload
+	else
+	Xcall	DILoad
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDIBadMount:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)		*Center
+	move.l	\2,-(sp)	*Message
+	clr.w	-(sp)		*Selector
+	dc.w	_pack2		*dibadmount
+	move.w	(sp)+,\3	*get return
+	else
+	map_in_2	\1,\2
+	Xcall	DIBadMount
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDIUnload:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.w	#4,-(sp)
+	dc.w	_pack2		*diunload
+	else
+	Xcall	DIUnload
+	endif
+	macs_first	  *back to translate mode
+	endm	
+	
+********************************CURSOR***********************
+OSObscureCursor:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	dc.w	_ObscureCursor
+	trashv
+	else
+	Xcall	ObscureCursor
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+OSHideCursor:	macro
+	macs_last
+	if	68k
+	dc.w	_hidecursor
+	trashv
+	else
+	Xcall	HideCursor
+	trash45
+	endif
+	macs_first
+	endm
+
+OSShowCursor:	macro
+	macs_last
+	if	68k
+	dc.w	0xa853
+	trashv
+	else
+	Xcall	ShowCursor
+	trash45
+	endif
+	macs_first
+	endm
+
+******************************APPLE EVENTS*******************
+OSAECreateDescriptor:	 macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)	*sizeof
+	move.l	\4,-(sp)	*we want descriptor here
+	move.w	#$825,d0	*createdescriptor
+	dc.w	_pack8
+	trashv
+	move.w	(sp)+,\5	*OSErr
+
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	AECreateDesc
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSAECreateDesc:	macro
+	OSAECreateDescriptor \1,\2
+	endm
+
+OSAEDisposeDescriptor:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	#$204,d0	*disposedescriptor
+	dc.w	_pack8
+	trashv
+	move.w	(sp)+,\2	*OSErr
+
+	else
+	map_in_1	\1
+	Xcall	AEDisposeDesc
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSAEDisposeDesc:	macro
+	OSAEDisposeDescriptor \1,\2
+	endm
+	
+OSAECreateAppleEvent:	 macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(Sp)	*event class
+	move.l	\2,-(SP)	*EVent ID
+	move.l	\3,-(sp)			*descriptor
+	move.w	\4,-(sp)	*tells Apple Event Manager */
+                                            * to generate a unique */
+                                            * return ID*/
+	move.l	\5,-(sp)	*The apple event is not part of any transaction	
+	move.l	\6,-(sp)	*AEvent here pse.
+	move.w	#$0B14,d0
+	dc.w 	$A816		*createappleevent
+	trashv
+	move.w	(sp)+,\7	*error
+	else
+	map_in_6	\1,\2,\3,\4,\5,\6
+	Xcall	AECreateAppleEvent
+	trash45
+	cmpwi	r3,0
+	map_out	\7
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSAESend:	 macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*The aevt
+	move.l	\2,-(sp)	*The reply
+	move.l	\3,-(sp)	*Sendmode
+	move.w	\4,-(sp)	*priority
+	move.l	\5,-(SP)	*Timeout
+	move.l	\6,-(sp)	*no idle proc
+	move.l	\7,-(sp)	*No event filter proc
+	move.w	#$0D17,d0	*AESend
+	dc.w 	$A816
+	trashv
+	move.w	(sp)+,\8
+
+	else
+	map_in_7	\1,\2,\3,\4,\5,\6,\7
+	Xcall	AESend
+	trash45
+	cmpwi	r3,0
+	map_out	\8
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSAEPutParamDesc:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+    move.l	\1,-(sp)	**appleevent
+    move.l	\2,-(sp)	*keyword - direct object - the one and only
+	move.l	\3,-(sp)
+    move.w	#$0610,d0
+    dc.w	$a816
+   	trashv
+    move.w	(sp)+,\4
+	else
+	map_in_3	\1,\2,\3
+	Xcall	AEPutParamDesc
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSAEProcessAppleEvent:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.w	#$21b,d0
+	dc.w	_pack8	*AEProcessAppleEvent
+	trashv
+	move.w	(sp)+,\2
+	else
+	map_in_1	\1
+	Xcall	AEProcessAppleEvent
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSAEInstallEventHandler:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	move.l	\4,-(sp)
+	move.b	\5,-(sp)
+	move.w	#$91f,d0	*AEInstallEventHandler
+	dc.w	_pack8
+	trashv
+	move.w	(sp)+,\6
+
+	else
+	map_in_5	\1,\2,\3,\4,\5
+	Xcall	AEInstallEventHandler
+	trash45
+	cmpwi	r3,0
+	map_out	\6
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSAEGetKeyDesc:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*the event
+	move.l	\2,-(sp)
+	move.l	\3,-(sp)
+	move.l	\4,-(sp)		
+	move.w	#$812,d0	AEGetKeyDesc
+	dc.w	_pack8
+	trashv
+	move.w	(sp)+,\5	*get error
+
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	AEGetParamDesc
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSAECountItems:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	\2,-(sp)
+	MOVE.W	#$407,d0	*aecountitems
+	dc.w	_pack8
+	trashv
+	move.w	(sp)+,\3
+
+	else
+	map_in_2	\1,\2
+	Xcall	AECountItems
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSAEGetNthPtr:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*the list
+	move.l	\2,-(sp)	*the index
+	move.l	\3,-(sp)	*we want coerce to Fsspecs please
+	move.l	\4,-(sp)
+	move.l	\5,-(sp)	*the type returned
+	move.l	\6,-(sp)	*where to put the fsspec
+	move.l	\7,-(sp)	*maximum size of data to return
+	move.l	\8,-(sp)
+	move.w	#$100a,d0	*AEGetNthPtr
+	dc.w	_pack8
+	trashv
+	move.w	(sp)+,\9
+
+	else
+	map_in_8	\1,\2,\3,\4,\5,\6,\7,\8
+	Xcall	AEGetNthPtr
+	trash45
+	cmpwi	r3,0
+	map_out	\9
+	endif
+	macs_first	  *back to translate mode
+	endm
+************************STANDARD FILE************************
+**NOte - run out of macro params here! Will need modifying for an activate
+**proc and ydata pointer!
+OSCustomGetFile:	macro	*What a beasty!
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)	*File filter
+	move.w	\2,-(sp)	*NUm type
+	move.l	\3,-(sp)	*Typelist
+	move.l	\4,-(sp)	*Sfreply please
+	move.w	\5,-(Sp)	*Dialog ID - launch app
+	move.l	\6,-(sp)	*Where
+	move.l	\7,-(sp)	*DLGHook
+	move.l	\8,-(sp)	*Modalfilter
+	clr.l	-(sp)	*Active list
+	clr.l	-(sp)	*Activate proc
+	clr.l	-(sp)	*data pointer
+	move.w	#8,-(sp)	*CustomGetFile
+	dc.w	_pack3
+	trashv
+	else
+	map_in_8	\1,\2,\3,\4,\5,\6,\7,\8
+	ifnd	CustomGetFile
+	import	CustomGetFile
+	endif	
+
+	macs_last
+**Stack frame - we need 24 for linkage and 88 for up to 17 int params
+	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
+						; ref: IM PPC System SW 1-47
+*We must set params 9,10 and 11 on the stack - zero - see "limitations" in LXT doc
+*for workaround (paste this macro in-line and put params 9,10,11 in stack at +56 onwards)
+	li	r12,0
+	stw	r12,56(sp)	*params start at 24
+	stw	r12,60(sp)
+	stw	r12,64(sp)
+
+*set up params
+	lwz	r12,CustomGetFile(rtoc)	*load transition vector
+	stw	R2,20(sp)	*save my RTOC
+	lwz	r0,0(r12) 	*get callee address
+	mtctr	r0		*prepare branch
+	lwz	R2,4(r12)	*set callee RTOC
+	bctrl			*bsr to callee
+	lwz	r2,20(sp)	*get my toc back
+**Tear down stack frame
+	addi	sp,sp,112
+
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+OSCustomPutFile:	macro	*What a beasty!
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	move.l	\1,-(sp)	*Prompt
+	move.l	\2,-(sp)	*Default name
+	move.l	\3,-(sp)	*Reply
+	move.w	\4,-(sp)	*ID
+	move.l	\5,-(Sp)	*where
+	move.l	\6,-(sp)	*DLGHook
+	move.l	\7,-(sp)	*Filter
+	move.l	\8,-(sp)	*Avtive list
+	clr.l	-(sp)	*Activate proc
+	clr.l	-(sp)	*data pointer
+	move.w	#7,-(sp)	*CustomPetFile
+	dc.w	_pack3
+	trashv
+	else
+	map_in_8	\1,\2,\3,\4,\5,\6,\7,\8	*run out of macro params!
+	ifnd	CustomPutFile
+	import	CustomPutFile
+	endif	
+
+	macs_last
+**Stack frame - we need 24 for linkage and 88 for up to 17 int params
+	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
+						; ref: IM PPC System SW 1-47
+*We must set params 9 and 10 on the stack - zero - see "limitations" in LXT doc
+*for workaround (paste this macro in-line and put params 9,10,11 in stack at +56 onwards)
+	stw	r3,24(sp)
+	stw	r4,28(sp)
+	stw	r5,32(sp)
+	stw	r6,36(sp)
+	stw	r7,40(sp)
+	stw	r8,44(sp)
+	stw	r9,48(sp)
+	stw	r10,52(sp)
+	li	r12,0
+	stw	r12,56(sp)	*params start at 24
+	stw	r12,60(sp)
+
+*set up params
+	lwz	r12,CustomPutFile(rtoc)	*load transition vector
+	stw	R2,20(sp)	*save my RTOC
+	lwz	r0,0(r12) 	*get callee address
+	mtctr	r0		*prepare branch
+	lwz	R2,4(r12)	*set callee RTOC
+	bctrl			*bsr to callee
+	lwz	r2,20(sp)	*get my toc back
+**Tear down stack frame
+	addi	sp,sp,112
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSPBControl:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	dc.w	_PBControl
+	trashv
+	ifnc	"\2","D0"
+	move.w	d0,\2
+	endif
+	else
+	map_in_1	\1
+	Xcall	PBControlImmed
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+
+************************ADB*********************************
+OSADBOp:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+
+	ifnc	"\2","D0"
+	move.l	\2,d0
+	endif
+	dc.w	_ADBOp
+	ifnc	"\3","D0"
+	move.w	d0,\3
+	endif
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	ADBOp
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetIndADB:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	ifnc	"\1","A0"
+	move.l	\1,a0
+	endif
+	ifnc	"\2","D0"
+	move.l	\2,d0
+	endif	 
+	dc.w	_GetIndADB
+	ifnc	"\3","D0"
+	move.w	d0,\3
+	endif
+	else
+	map_in_2	\1,\2
+	Xcall	GetIndADB
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+
+**************************SPEECH********************
+OSNewSpeechChannel:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*default speech
+	move.l	\2,-(sp)	*Channel ptr
+	move.l	#0x0418000C,d0
+	dc.w	_SoundDispatch	*NewSpeechChannel
+	trashv
+	move.w	(sp)+,\3	*error
+
+	else
+	map_in_2	\1,\2
+	Xcall	NewSpeechChannel
+	trash45
+	cmpwi	r3,0
+	map_out	\3
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+OSSetSpeechInfo:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*Channel
+	move.l	\2,-(sp)	*Info	selector
+	move.l	\3,-(sp)	*the data
+	move.l	#0x0654000C,d0
+	dc.w	_SoundDispatch
+	trashv
+	move.w	(sp)+,\4	*error
+
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SetSpeechInfo
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSpeakText:	macro
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)		*Channel
+	move.l	\2,-(sp)		*text to speak
+	move.l	\3,-(sp)		*length
+	move.l	#0x0624000C,d0	*Speaktext
+	dc.w	_SoundDispatch
+	trashv
+	move.w	(sp)+,\4
+
+	else
+	map_in_3	\1,\2,\3
+	Xcall	SpeakText
+	trash45
+	cmpwi	r3,0
+	map_out	\4
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSStopSpeech:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)			*Channel
+	move.l	#0x022C000C,d0		*stopspeech
+	dc.w	_SoundDispatch
+	trashv
+	move.w	(sp)+,\2
+
+	else
+	map_in_1	\1
+	Xcall	StopSpeech
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSDisposeSpeechChannel:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)			*Channel
+	move.l	#0x021C000C,d0
+	dc.w	_SoundDispatch		*DisposeSpeechChannel
+	trashv
+	move.w	(sp)+,\2
+
+	else
+	map_in_1	\1
+	Xcall	DisposeSpeechChannel
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSpeakString:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)
+	move.l	#0x0220000C,d0
+	dc.w	_SoundDispatch	;0xA800 - SPeakString
+	trashv
+	move.w	(sp)+,\2
+
+	else
+	map_in_1	\1
+	Xcall	SpeakString
+	trash45
+	cmpwi	r3,0
+	map_out	\2
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSSpeechBusy:	macro	*Error (reg)
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	#0x003C000C,d0	*SpeechBusy
+	dc.w	_SoundDispatch	;0xA800
+	trashv
+	move.w	(sp)+,\1
+
+	else
+	Xcall	SpeechBusy
+	trash45
+	cmpwi	r3,0
+	map_out	\1
+	endif
+	macs_first	  *back to translate mode
+	endm	
+**********************FRAGMENTS************************
+OSCloseConnection:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*Connection ID to frag
+	move.w	#$0004,-(sp)
+	dc.w 	$AA5A		*closeconnection
+	trashv
+	move.w	(sp)+,\2	*error
+	else
+	map_in_1	\1
+	Xcall	CloseConnection
+	trash45
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSGetMemFrag:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*fragment ptr
+	move.l	\2,-(sp)	*fragment length
+	move.l	\3,-(sp)	*ptr to name
+	move.l	\4,-(sp)	*load flags
+	move.l	\5,-(sp)	*ptr to returned connection id storage
+	move.l	\6,-(sp)	*ptr to returned entry point TV
+	move.l	\7,-(sp)	*ptr to space for returned error
+	move.w	#3,-(sp)
+	dc.w	0xaa5a
+	trashv
+	move.w	(sp)+,\8	*returned error
+	else
+	map_in_7	\1,\2,\3,\4,\5,\6,\7
+	Xcall	GetMemFragment
+	trash45
+	cmpwi	r3,0
+	map_out	\8
+	endif
+	macs_first	  *back to translate mode
+	endm
+
+OSFindSymbol:	macro
+	macs_last	*avoid clashes with real instructions
+	if 68k
+	subq.w	#2,sp
+	move.l	\1,-(sp)	*connection ID
+	move.l	\2,-(sp)	*name ptr
+	move.l	\3,-(sp)	*where function descriptor to go
+	move.l	\4,-(sp)	*ptr to class
+	move.w	#5,-(sp)
+	dc.w	$aa5a	*FindSymbol
+	trashv
+	move.w	(sp)+,\5
+	else
+	map_in_4	\1,\2,\3,\4
+	Xcall	FindSymbol
+	trash45
+	cmpwi	r3,0
+	map_out	\5
+	endif
+	macs_first	  *back to translate mode
+	endm
+	
+*****************PRINTING**************************
+OSPrOpen:	macro
+	macs_last	*avoid clashes with real instructions
+		if	68k
+			dc.w 	$2F3C
+			dc.w 	$C800
+			dc.w 	$0000
+			dc.w 	$A8FD
+		else
+		Xcall	PrOpen
+		endif
+	macs_first	  *back to translate mode
+		endm
+OSPrStlDialog:		macro
+	macs_last	*avoid clashes with real instructions
+		if 68k
+		clr.b	-(sp)
+		move.l	\1,-(sp)
+			dc.w 	$2F3C
+			dc.w 	$2A04
+			dc.w 	$0484
+			dc.w 	$A8FD
+		move.b	(sp)+,\2
+		else
+		map_in_1	\1
+		Xcall	PrStlDialog
+	cmpwi	r3,0
+	map_out	\2
+		endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrClose:	macro
+	macs_last	*avoid clashes with real instructions
+		if	68k
+		dc.w 	$2F3C
+		dc.w 	$D000
+		dc.w 	$0000
+		dc.w 	$A8FD
+		else
+		Xcall	PrClose
+		endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrValidate:	macro
+	macs_last	*avoid clashes with real instructions
+		if 68k
+		clr.b	-(sp)
+		move.l	\1,-(sp)
+			dc.w 	$2F3C
+			dc.w 	$5204
+			dc.w 	$0498
+			dc.w 	$A8FD
+		move.b	(sp)+,\2
+		else
+	map_in_1	\1
+		Xcall	PrValidate
+	cmpwi	r3,0
+	map_out	\2
+		endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrJobDialog		macro
+	macs_last	*avoid clashes with real instructions
+		if 68k
+		clr.b	-(sp)
+		move.l	\1,-(sp)
+		dc.w 	$2F3C
+		dc.w 	$3204
+		dc.w 	$0488
+		dc.w 	$A8FD
+		move.b	(sp)+,\2
+		else
+	map_in_1	\1
+		Xcall	PrJobDialog
+	cmpwi	r3,0
+	map_out	\2
+		endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrOpenDoc:		macro
+		macs_last	*avoid clashes with real instructions
+	if 68k
+		clr.l	-(sp)
+		move.l	\1,-(sp)
+		move.l	\2,-(sp)
+		move.l	\3,-(sp)
+			dc.w 	$2F3C
+			dc.w 	$0400
+			dc.w 	$0C00
+			dc.w 	$A8FD
+		move.l	(sp)+,\4
+		else
+	map_in_3	\1,\2,\3
+		Xcall	PrOpenDoc
+	cmpwi	r3,0
+	map_out	\4
+		endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrCloseDoc:		macro
+	macs_last	*avoid clashes with real instructions
+			if	68k
+			move.l	\1,-(sp)
+			dc.w 	$2F3C
+			dc.w 	$0800
+			dc.w 	$0484
+			dc.w 	$A8FD
+			else
+	map_in_1	\1
+			Xcall	PrCloseDoc
+			endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrOpenPage:		macro
+	macs_last	*avoid clashes with real instructions
+			if 68k
+			move.l	\1,-(sp)
+			move.l	\2,-(sp)
+			dc.w 	$2F3C
+			dc.w 	$1000
+			dc.w 	$0808
+			dc.w 	$A8FD
+			else
+	map_in_2	\1,\2
+			Xcall	PrOpenPage
+			endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrClosePage:		macro
+	macs_last	*avoid clashes with real instructions
+			if	68k	
+			move.l	\1,-(sp)
+			dc.w 	$2F3C
+			dc.w 	$1800
+			dc.w 	$040C
+			dc.w 	$A8FD
+			else
+	map_in_1	\1
+			Xcall	PrClosePage
+			endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrPicFile:		macro
+	macs_last	*avoid clashes with real instructions
+		if	68k
+		move.l	\1,-(sp)	*HPrtRec
+		move.l	\2,-(sp)	*pPrPort
+		move.l	\3,-(sp)	*pIOBuf
+		move.l	\4,-(sp)	*pDevBuf
+		move.l	\5,-(sp)	*pPrStatus
+			dc.w 	$2F3C
+			dc.w 	$6005
+			dc.w 	$1480
+			dc.w 	$A8FD
+		else
+	map_in_5	\1,\2,\3,\4,\5
+		Xcall	PrPicFile
+		endif
+	macs_first	  *back to translate mode
+		endm
+
+OSPrError:	macro
+	macs_last	*avoid clashes with real instructions
+			if	68k
+			subq.w	#2,sp
+			dc.w 	$2F3C
+			dc.w 	$BA00
+			dc.w 	$0000
+			dc.w 	$A8FD
+			move.w	(sp)+,\1
+			else
+			Xcall	PrError
+	cmpwi	r3,0
+	map_out	\1
+			endif
+	macs_first	  *back to translate mode
+		endm
+
+
+OSdefault	macro
+	macs_last
+	if 68k
+	else
+	fail
+	endif
+	macs_first	  *back to translate mode
+	endm
+****************************************************************
+**Low memory accessors
+**The PPC versions are due revision to use the interfacelib exported accessors
+OSGetCurrentA5:	macro
+	macs_last
+	if	68k
+	move.l	$904,\1
+	else
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,0x904
+	lwz	[t$],(`temp_reg1)
+	endif
+	macs_first
+	endm
+
+OSGetTEScrpHandle:	macro
+	macs_last
+	if	68k
+	move.l	$AB4,\1
+	else
+	ifeq	CARBON
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,0xAB4
+	lwz	[t$],(`temp_reg1)
+	endif
+	endif
+	macs_first
+	endm
+
+OSGetTEScrpLength:	macro
+	macs_last
+	if	68k
+	move.w	$0AB0,\1
+	else
+	ifeq	CARBON
+
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,$0AB0
+	lhz	[t$],(`temp_reg1)
+	cmpwi	[t$],0
+	endif
+	endif
+	macs_first
+	endm
+
+OSGetMemErr:	macro
+	macs_last
+	if	68k
+	move.w	$220,\1
+	else
+	
+	code_reg	\1	*returns PPC register in t$
+	Xcall	LMGetMemErr
+	mr	[t$],r3
+	extsh.	[t$],[t$]
+	endif
+	macs_first
+	endm
+
+**GetMemErr's HL alias	 
+OSMemError:	macro
+	OSGetMemErr	\1
+	endm
+
+OSGetResErr:	macro
+	macs_last
+	if	68k
+	move.w	$a60,\1
+	else
+	code_reg	\1	*returns PPC register in t$
+	Xcall	LMGetResErr
+	mr	[t$],r3
+	extsh.	[t$],[t$]
+	endif
+	macs_first
+	endm
+
+	
+OSGetGrayRgn:	macro
+	macs_last
+	if	68k
+	move.l	$9ee,\1
+	else
+	code_reg	\1	*returns PPC register in t$
+	Xcall	GetGrayRgn
+	mr	[t$],r3
+	endif
+	macs_first
+	endm
+
+OSGetMBarHeight:	macro
+	macs_last
+	if	68k
+	move.w	$0BAA,\1
+	else
+	code_reg	\1	*returns PPC register in t$
+	Xcall	GetMBarHeight
+	mr	[t$],r3
+	extsh.	[t$],[t$]	 endif
+	macs_first
+	endif
+	endm
+
+OSGetCurDirStore:	macro	reg
+	macs_last
+	if	68k
+	move.l	0x398,\1
+	else
+	ifeq	CARBON
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,$0398
+	lwz	[t$],(`temp_reg1)
+	cmpwi	[t$],0
+	endif	;carbon
+	endif
+	macs_first
+	endm
+
+OSGetSFSaveDisk:	macro	reg
+	macs_last
+	if	68k
+	move.w	0x214,\1
+	else
+	ifeq	CARBON
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,$0214
+	lhz	[t$],(`temp_reg1)
+	extsh.	[t$],[t$]
+	endif	;carbon
+	endif
+	macs_first
+	endm
+	
+
+OSGetApplLimit:	macro	reg
+	macs_last
+	if	68k
+	move.l	0x130,\1
+	else
+	ifeq	CARBON
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,$0130
+	lwz	[t$],(`temp_reg1)
+	endif
+	endif
+	macs_first
+	endm
+	
+OSGetCaretTime:	macro	reg
+	macs_last
+	if	68k
+	move.l	0x2f4,\1
+	else
+	Xcall	GetCaretTime
+	map_out	\1
+	endif
+	macs_first
+	endm
+	
+OSPutCurDirStore:	macro	reg
+	macs_last
+	if	68k
+	move.l	\1,0x398
+	else
+	ifeq	CARBON
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,$0398
+	stw	[t$],(`temp_reg1)
+	endif	;carbon
+	endif
+	macs_first
+	endm
+
+OSPutSFSaveDisk:	macro	reg
+	macs_last
+	if	68k
+	move.w	\1,0x214
+	else
+	ifeq	CARBON
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,$0214
+	sth	[t$],(`temp_reg1)
+	endif	;carbon
+	endif
+	macs_first
+	endm
+
+OSPutTEScrpLength:	macro	reg
+	macs_last
+	if	68k
+	move.w	\1,$0AB0
+	else
+	ifeq	CARBON
+	code_reg	\1	*returns PPC register in t$
+	li	`temp_reg1,$0AB0
+	sth	[t$],(`temp_reg1)
+	endif
+	endif
+	macs_first
+	endm
+
+
+
+
+
+***********Shorthand macros
+Curs:	macro
+	OSSetCCursor	\1
+	endm
+FC:	macro
+	OSRGBForeColor	\1
+	endm
+BC:	macro
+	OSRGBBackColor	\1
+	endm
+
+***************************************************************************
+**Support macros for OS calls
+***************************************************************************
+**Output parameter mapping - needs 1 parameter - the parameter that contains the output register
+map_out:	MACRO
+	code_reg	\1	*map to a PPC register
+	ifnc	"[t$]","r3"	*if it isn't r3 then move it into the output register
+	mr	[t$],r3
+	endif
+	ENDM
+*************Input parameter register mapping macros
+map_in_1:	MACRO
+	code_reg	\1	*returns PPC register in t$ - no need for operand overlap check here
+	ifnc	"[t$]","r3"
+	mr	r3,[t$]
+	endif
+	ENDM
+	
+map_in_2:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+
+	
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+**Check we moved all parameters
+	test_moveds2
+	ifne	master_moved	*until all parameters have been moved
+	fail	"Operand overlap (68K register d0-d2) in OS call"
+	endif
+
+	endm
+	
+map_in_3:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+	set_lock	\3,3
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+	code_reg	\3
+	ifnc	"[t$]","r5"
+		ifeq	lock5
+			mr	r5,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r5		*tells use we have produced code
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r5
+	endif
+
+**Check we moved all parameters
+	did_move?
+	endm
+
+	
+map_in_4:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+	set_lock	\3,3
+	set_lock	\4,4
+	
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+	code_reg	\3
+	ifnc	"[t$]","r5"
+		ifeq	lock5
+			mr	r5,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r5		*tells use we have produced code
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r5
+	endif
+
+	code_reg	\4
+	ifnc	"[t$]","r6"
+		mr	r6,[t$]
+	endif
+
+**CHeck we moved all parameters
+	did_move?
+	endm
+	
+map_in_5:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+	set_lock	\3,3
+	set_lock	\4,4
+	set_lock	\5,5
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+	code_reg	\3
+	ifnc	"[t$]","r5"
+		ifeq	lock5
+			mr	r5,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r5		*tells use we have produced code
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r5
+	endif
+	code_reg	\4
+	ifnc	"[t$]","r6"
+	mr	r6,[t$]
+	endif
+	code_reg	\5
+	ifnc	"[t$]","r7"
+	mr	r7,[t$]
+	endif
+**Check we moved all parameters
+	did_move?
+	endm
+
+map_in_6:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+	set_lock	\3,3
+	set_lock	\4,4
+	set_lock	\5,5
+	set_lock	\6,6
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+	code_reg	\3
+	ifnc	"[t$]","r5"
+		ifeq	lock5
+			mr	r5,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r5		*tells use we have produced code
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r5
+	endif
+	code_reg	\4
+	ifnc	"[t$]","r6"
+	mr	r6,[t$]
+	endif
+	code_reg	\5
+	ifnc	"[t$]","r7"
+	mr	r7,[t$]
+	endif
+	code_reg	\6
+	ifnc	"[t$]","r8"
+	mr	r8,[t$]
+	endif
+**Check we moved all parameters
+	did_move?
+	endm
+map_in_7:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+	set_lock	\3,3
+	set_lock	\4,4
+	set_lock	\5,5
+	set_lock	\6,6
+	set_lock	\7,7
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+	code_reg	\3
+	ifnc	"[t$]","r5"
+		ifeq	lock5
+			mr	r5,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r5		*tells use we have produced code
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r5
+	endif
+	code_reg	\4
+	ifnc	"[t$]","r6"
+	mr	r6,[t$]
+	endif
+	code_reg	\5
+	ifnc	"[t$]","r7"
+	mr	r7,[t$]
+	endif
+	code_reg	\6
+	ifnc	"[t$]","r8"
+	mr	r8,[t$]
+	endif
+	code_reg	\7
+	ifnc	"[t$]","r9"
+	mr	r9,[t$]
+	endif
+**Check we moved all parameters
+	did_move?
+	endm
+	
+map_in_8:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+	set_lock	\3,3
+	set_lock	\4,4
+	set_lock	\5,5
+	set_lock	\6,6
+	set_lock	\7,7
+	set_lock	\8,8
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+	code_reg	\3
+	ifnc	"[t$]","r5"
+		ifeq	lock5
+			mr	r5,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r5		*tells use we have produced code
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r5
+	endif
+	code_reg	\4
+	ifnc	"[t$]","r6"
+	mr	r6,[t$]
+	endif
+	code_reg	\5
+	ifnc	"[t$]","r7"
+	mr	r7,[t$]
+	endif
+	code_reg	\6
+	ifnc	"[t$]","r8"
+	mr	r8,[t$]
+	endif
+	code_reg	\7
+	ifnc	"[t$]","r9"
+	mr	r9,[t$]
+	endif
+	code_reg	\8
+	ifnc	"[t$]","r10"
+	mr	r10,[t$]
+	endif
+**Check we moved all parameters
+	did_move?
+	endm
+map_in_9:	macro
+	clear_locks
+	set_lock	\1,1	*if /1 is r3-5 we set the right lock, param2=parametr number 
+	set_lock	\2,2
+	set_lock	\3,3
+	set_lock	\4,4
+	set_lock	\5,5
+	set_lock	\6,6
+	set_lock	\7,7
+	set_lock	\8,8
+	set_lock	\9,9
+	code_reg	\1	*returns PPC register in t$
+	ifnc	"[t$]","r3"
+**Check lock 3
+		ifeq	lock3	*Can we move to r3? Zero if yes.
+			mr	r3,[t$]
+			clear_lock	[t$]	*clear any lock on the source register, sets have_moved flag
+			set_moved	r3
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r3
+	endif
+
+	code_reg	\2	*returns PPC register in t$
+		ifnc	"[t$]","r4"
+			ifeq	lock4
+			mr	r4,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r4
+			endif
+		else
+			clear_lock	[t$]
+			set_moved	r4
+		endif
+	code_reg	\3
+	ifnc	"[t$]","r5"
+		ifeq	lock5
+			mr	r5,[t$]
+			clear_lock	[t$]	*clear any lock on the source register
+			set_moved	r5		*tells use we have produced code
+		endif
+	else
+			clear_lock	[t$]
+			set_moved	r5
+	endif
+	code_reg	\4
+	ifnc	"[t$]","r6"
+	mr	r6,[t$]
+	endif
+	code_reg	\5
+	ifnc	"[t$]","r7"
+	mr	r7,[t$]
+	endif
+	code_reg	\6
+	ifnc	"[t$]","r8"
+	mr	r8,[t$]
+	endif
+	code_reg	\7
+	ifnc	"[t$]","r9"
+	mr	r9,[t$]
+	endif
+	code_reg	\8
+	ifnc	"[t$]","r10"
+	mr	r10,[t$]
+	endif
+	code_reg	\9
+	ifnc	"[t$]","r11"
+	mr	r11,[t$]
+	endif
+**Check we moved all parameters
+	did_move?
+	endm
+**Simple macro to check we movedall the operands
+did_move?:	macro
+	test_moveds
+	ifne	master_moved	*until all parameters have been moved
+	fail	"Operand overlap (68K register d0-d2) in OS call"
+	endif
+	endm
+

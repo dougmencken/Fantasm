@@ -1,0 +1,35 @@
+	include	r2d2_support_macros
+*******************************************************************************
+*Project:       Fantasm5(r2d2)                                                *
+*Author:        Rob'n'Stu                                                     *
+*Filename:      r2d2_misc.s                                                   *
+*Version:                                                                     *
+*Date started:  12:25:54 on 22nd August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+
+	macs_last
+**Sends string in r3 to 68k do_pass1_warning_always routine
+*	CallUniversalProc(command_pb->callback,uppAnvCallback,my_pb_ptr);
+;	import	CallUniversalProc
+;param_pass:	equ	0xc1	*upp parameter passing method - C on stack.
+
+; two longwords on the stack
+;two_param_pass:	equ	0x3c1	*upp parameter passing method - C on stack.
+
+; r4 = aux warning info, 0=no info
+do_pass1_warning:
+	sub_in
+	mr	r5,r3	*the ptr to the string to send in parm 3
+	mr  r6,r4
+	lwz	r3,pass1_error_ptr(`bss)	*the 68k code in Fant
+	mtctr	r3
+	bctrl	*do warning
+;	movei	r4,two_param_pass	*parameter passing technique - on the stack
+;	Xcall	CallUniversalProc
+	macs_last
+	sub_out
+	global	do_pass1_warning
+	

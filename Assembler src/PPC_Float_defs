@@ -1,0 +1,444 @@
+**	 df.s	 0.0
+**assembles as dc.w %constant
+**we call dc.w having set up field 2 and 3 to save code repetition
+**we copy field 3, and then print the binary definition into field 3, then call dcw_ppc
+**pi should come out as 0 10000000 10010010000111111011010 in single format
+**Can be tested with
+;	 lwz	 r11,test_float_s(rtoc)
+;	 lfs	 f1,(r11)
+;test_float_s:	 dc.w	 0x40490fda
+;and Macsbug will show pi
+
+define_float_single:
+	
+	section	float_single
+	rsreset
+	local.b	the_field_3_string,256
+	link	a4,#-1000
+
+	tst.b	frag_loaded(a5)
+	beq	no_frag_error
+	if	PPC
+***************************
+
+**copy field 3 to our field 3
+	lea	field_3(a5),a0
+	lea	the_field_3_string(a4),a1	*copy to here
+	move.l	#255,d2
+	OSBlockMoveData	a0,a1,d2
+;	dc.w	_BlockMove
+
+**now copy first param to temp_string4
+	lea	the_field_3_string(a4),a0
+do_next_single:
+	lea	temp_string4(a5),a1
+	move.b	(a0),d0
+	beq	dfs_end
+	cmpi.b	#9,d0
+	beq	dfs_end
+	cmpi.b	#32,d0
+	beq	dfs_end
+	
+dns1:
+	move.b	(a0),d0
+	beq.s	.end_copy
+	cmpi.b	#9,d0
+	beq.s	.end_copy
+	cmpi.b	#32,d0
+	beq.s	.end_copy
+	cmpi.b	#0x2c,d0
+	beq.s	.end_copy
+	addq.l	#1,a0
+	move.b	d0,(a1)+
+	bra.s	dns1	*copy operand
+.end_copy:
+	clr.b	(a1)
+	move.l	a0,-(sp)	*save our pos
+**now send it to fant_to_single
+
+	moveq	#0,d0		*parameter to frag
+	lea	temp_string4(a5),a2
+	move.l	a2,d1
+	macs_last
+	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
+	bl	fant_to_single
+	addi	sp,sp,112
+	macs_first
+;	lea	fd_proc_pointer(pc),a0
+;	move.l	to_single_fd(a5),(a0)	  *This is a pointer to fant_to_single's fd
+;	bsr	univ_pointer	*returns a pointer in d0, or -1 if failed
+	tst.l	d0
+	bne.s	single_did_not_fail
+	move.l a0,-(sp) ;	  *save source position
+	lea dfs_error(pc),a0	*print defined twice
+	bsr.l	pass1_error
+	movea.l (sp)+,a0
+	bra.s	dfs_end
+single_did_not_fail:
+
+**now we can safely write to field 3
+**we now have to print (d0) as a binary number
+	lea	field_3(a5),a0
+	move.l	d0,a1
+	bsr	print_bin32	*returns a0 at end of string
+	clr.b	(a0)
+	lea	field_2(a5),a0
+	move.l	#"dc.w",(a0)
+	clr.b	4(a0)	*now we have "optional_label: dc.w %binary number"
+	move.l	a4,-(sp)
+	bsr.l	dcw_ppc_ent
+	move.l	(sp)+,a4
+**now if there were multiple operands, clear field 1 so we don't get multiple
+**labels!
+	clr.l	field_1(a5)
+	move.l	(sp)+,a0
+	cmpi.b	#0x2c,(a0)
+	bne.s	.not_comma
+	inc.l	a0
+.not_comma:
+	bra	do_next_single
+	endif
+dfs_end:	unlk	a4
+	rts_	"F5_Define_float_single"
+no_frag_error:
+	move.l a0,-(sp) ;	  *save source position
+	lea dfs_frag_error(pc),a0	*print defined twice
+	bsr.l	pass1_error
+	movea.l (sp)+,a0
+	bra.s	dfs_end
+
+**prints (a1) into a0 as a 32 bit binary number
+print_bin32:
+	move.b	#"%",(a0)+
+	move.l	(a1),d0
+	moveq	#31,d1	*bit counter
+pb32_loop:
+	btst	d1,d0
+	beq.s	do_zero
+	move.b	#"1",(a0)+
+	bra.s	done_digit
+do_zero:
+	move.b	#"0",(a0)+
+done_digit:
+	dbra	d1,pb32_loop
+	rts_	"Print_bin32"
+	
+**	df.d	0.0
+**assembles as dc.w constant32,constant32
+define_float_double:
+	section	float_double
+	link	a4,#-1000
+
+	tst.b	frag_loaded(a5)
+	beq	no_frag_error
+	if	PPC
+***************************
+
+**copy field 3 to our field 3
+	lea	field_3(a5),a0
+	lea	the_field_3_string(a4),a1	*copy to here
+	move.l	#255,d2
+	OSBlockMoveData	a0,a1,d2
+
+**now copy first param to temp_string4
+	lea	the_field_3_string(a4),a0
+do_next_double:
+	lea	temp_string4(a5),a1
+	move.b	(a0),d0
+	beq	dfd_end
+	cmpi.b	#9,d0
+	beq	dfd_end
+	cmpi.b	#32,d0
+	beq	dfd_end
+	
+dnd1:
+	move.b	(a0),d0
+	beq.s	.end_copy
+	cmpi.b	#9,d0
+	beq.s	.end_copy
+	cmpi.b	#32,d0
+	beq.s	.end_copy
+	cmpi.b	#0x2c,d0
+	beq.s	.end_copy
+	addq.l	#1,a0
+	move.b	d0,(a1)+
+	bra.s	dnd1	*copy operand
+.end_copy:
+	clr.b	(a1)
+	move.l	a0,-(sp)	*save our pos
+**now send it to fant_to_single
+
+	moveq	#0,d0		*parameter to frag
+	lea	temp_string4(a5),a2
+	move.l	a2,d1
+	macs_last
+	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
+	bl	fant_to_double
+	addi	sp,sp,112
+	macs_first
+
+;	lea	fd_proc_pointer(pc),a0
+;	move.l	to_double_fd(a5),(a0)	*This is a pointer to fant_to_double's fd
+;	bsr	univ_pointer	*returns a pointer in d0, or -1 if failed
+	tst.l	d0
+	bne.s	double_did_not_fail
+	move.l a0,-(sp) ;	  *save source position
+	lea dfs_error(pc),a0	*print defined twice
+	bsr.l	pass1_error
+	movea.l (sp)+,a0
+	bra.s	dfd_end
+double_did_not_fail:
+
+**now we can safely write to field 3
+**we now have to print (d0) as a binary number
+	move.l	d0,-(sp)	*save result ptr
+	lea	field_3(a5),a0
+	move.l	d0,a1
+	bsr	print_bin32	*returns a0 at end of string
+	move.b	#0x2c,(a0)+
+	move.l	(sp)+,d0
+	addq.l	#4,d0
+	move.l	d0,a1
+	bsr	print_bin32	*returns a0 at end of string
+	clr.b	(a0)
+	lea	field_2(a5),a0
+	move.l	#"dc.w",(a0)
+	clr.b	4(a0)	*now we have "optional_label: dc.w %binary number"
+	move.l	a4,-(sp)
+	bsr.l	dcw_ppc_ent
+	move.l	(sp)+,a4
+**now if there were multiple operands, clear field 1 so we don't get multiple
+**labels!
+	clr.l	field_1(a5)
+	move.l	(sp)+,a0
+	cmpi.b	#0x2c,(a0)
+	bne.s	.not_comma
+	inc.l	a0
+.not_comma:
+	bra	do_next_double
+dfd_end:	unlk	a4
+	rts_	"F5_Define_float_double"
+	endif
+
+
+
+define_sin_single:
+	section	float_single_sin
+	rsreset
+	local.b	the_field_3dss_string,256
+	link	a4,#-1000
+
+	tst.b	frag_loaded(a5)
+	beq	no_frag_error
+	if	PPC
+***************************
+
+**copy field 3 to our field 3
+	lea	field_3(a5),a0
+	lea	the_field_3dss_string(a4),a1	*copy to here
+	move.l	#255,d2
+	OSBlockMoveData	a0,a1,d2
+
+**now copy first param to temp_string4
+	lea	the_field_3dss_string(a4),a0
+do_next_single_sin:
+	lea	temp_string4(a5),a1
+	move.b	(a0),d0
+	beq	.dfd_end
+	cmpi.b	#9,d0
+	beq	.dfd_end
+	cmpi.b	#32,d0
+	beq	.dfd_end
+	
+.dnfd:
+	move.b	(a0),d0
+	beq.s	.end_copy
+	cmpi.b	#9,d0
+	beq.s	.end_copy
+	cmpi.b	#32,d0
+	beq.s	.end_copy
+	cmpi.b	#0x2c,d0
+	beq.s	.end_copy
+	addq.l	#1,a0
+	move.b	d0,(a1)+
+	bra.s	.dnfd	*copy operand
+.end_copy:
+	clr.b	(a1)
+	move.l	a0,-(sp)	*save our pos
+**now send it to fant_to_single
+	moveq	#0,d0		*parameter to frag
+	lea	temp_string4(a5),a2
+	move.l	a2,d1
+	macs_last
+	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
+	bl	fant_to_single_sin
+	addi	sp,sp,112
+	macs_first
+
+;	lea	fd_proc_pointer(pc),a0
+;	move.l	to_single_sin_fd(a5),(a0)	*This is a pointer to fant_to_single's fd
+;	bsr	univ_pointer	*returns a pointer in d0, or -1 if failed
+	tst.l	d0
+	bne.s	.did_not_fail
+	move.l a0,-(sp) ;	  *save source position
+	lea dfs_error(pc),a0	*print defined twice
+	bsr.l	pass1_error
+	movea.l (sp)+,a0
+	bra.s	.dfd_end
+.did_not_fail:
+
+**now we can safely write to field 3
+**we now have to print (d0) as a binary number
+	lea	field_3(a5),a0
+	move.l	d0,a1
+	bsr	print_bin32	*returns a0 at end of string
+	clr.b	(a0)
+	lea	field_2(a5),a0
+	move.l	#"dc.w",(a0)
+	clr.b	4(a0)	*now we have "optional_label: dc.w %binary number"
+
+	lea	field_1(a5),a0
+	lea	field_2(a5),a0
+	lea	field_3(a5),a0
+	move.l	a4,-(sp)
+	bsr.l	dcw_ppc_ent
+	move.l	(sp)+,a4
+**now if there were multiple operands, clear field 1 so we don't get multiple
+**labels!
+	clr.l	field_1(a5)
+	move.l	(sp)+,a0
+	cmpi.b	#0x2c,(a0)
+	bne.s	.not_comma
+	inc.l	a0
+.not_comma:
+	bra	do_next_single_sin
+.dfd_end:	unlk	a4
+	rts_	"F5_Define_sin_single"
+	endif
+	
+**assembles as dc.w constant32,constant32
+define_sin_double:
+	section	sin_double
+	link	a4,#-1000
+
+	tst.b	frag_loaded(a5)
+	beq	no_frag_error
+	if	PPC
+***************************
+**copy field 3 to our field 3
+	lea	field_3(a5),a0
+	lea	the_field_3_string(a4),a1	*copy to here
+	move.l	#255,d2
+	OSBlockMoveData	a0,a1,d2
+
+**now copy first param to temp_string4
+	lea	the_field_3_string(a4),a0
+do_next_float_double:
+	lea	temp_string4(a5),a1
+	move.b	(a0),d0
+	beq	.dfsd_end
+	cmpi.b	#9,d0
+	beq	.dfsd_end
+	cmpi.b	#32,d0
+	beq	.dfsd_end
+	
+.dd1:
+	move.b	(a0),d0
+	beq.s	.end_copy
+	cmpi.b	#9,d0
+	beq.s	.end_copy
+	cmpi.b	#32,d0
+	beq.s	.end_copy
+	cmpi.b	#0x2c,d0
+	beq.s	.end_copy
+	addq.l	#1,a0
+	move.b	d0,(a1)+
+	bra.s	.dd1	*copy operand
+.end_copy:
+	clr.b	(a1)
+	move.l	a0,-(sp)	*save our pos
+**now send it to fant_to_single
+	moveq	#0,d0		*parameter to frag
+	lea	temp_string4(a5),a2
+	move.l	a2,d1
+	macs_last
+	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
+	bl	fant_to_double_sin
+	addi	sp,sp,112
+	macs_first
+
+;	lea	fd_proc_pointer(pc),a0
+;	move.l	to_double_sin_fd(a5),(a0)	*This is a pointer to fant_to_double's fd
+;	bsr.s	univ_pointer	*returns a pointer in d0, or -1 if failed
+	tst.l	d0
+	bne.s	.dbl_did_not_fail
+	move.l a0,-(sp) ;	  *save source position
+	lea dfs_error(pc),a0	*print defined twice
+	bsr.l	pass1_error
+	movea.l (sp)+,a0
+	bra.s	.dfsd_end
+.dbl_did_not_fail:
+
+**now we can safely write to field 3
+**we now have to print (d0) as a binary number
+	move.l	d0,-(sp)	*save result ptr
+	lea	field_3(a5),a0
+	move.l	d0,a1
+	bsr	print_bin32	*returns a0 at end of string
+	move.b	#0x2c,(a0)+
+	move.l	(sp)+,d0
+	addq.l	#4,d0
+	move.l	d0,a1
+	bsr	print_bin32	*returns a0 at end of string
+	clr.b	(a0)
+	lea	field_2(a5),a0
+	move.l	#"dc.w",(a0)
+	clr.b	4(a0)	*now we have "optional_label: dc.w %binary number"
+	move.l	a4,-(sp)
+	bsr.l	dcw_ppc_ent
+	move.l	(sp)+,a4
+**now if there were multiple operands, clear field 1 so we don't get multiple
+**labels!
+	clr.l	field_1(a5)
+	move.l	(sp)+,a0
+	cmpi.b	#0x2c,(a0)
+	bne.s	.not_comma
+	inc.l	a0
+.not_comma:
+	bra	do_next_float_double
+.dfsd_end:	unlk	a4
+	rts_	"F5_Define_sin_double"
+	endif
+
+;***MODE SWITCH CODE TO PPC
+;univ_pointer:	 DC.W	 $AAFE	 	 *MIXEDMODEMAGIC TRAP
+;	 DC.B	 7	 	 *VERSION OF MIXED MODE
+;	 DC.B	 0	 	 *
+;	 DC.L	 0	 	 *RES1
+;	 DC.B	 0	 	 *RES2
+;	 DC.B	 0	 	 *SELECTOR INFO
+;	 DC.W	 0	 	 *NUMBER OF ROUTINES (ARRAY INDEX!)
+;**PROCINFOREC
+;
+;**We need to pass a5 and a3
+;**               a1   a3   a2   d0   returns in d0
+;**		  r6   r5   r4   r3 
+;	 dc.l	 %1011111111110110001100000110010	 *register based call - procinfo
+;	 DC.B	 0	 	 *RESVD
+;	 DC.B	 1	 	 *PPC (68K=0)
+;	 DC.W	 4	 	 *ROUTINE FLAGS 4=NATIVE + 2=NEEDS INIT + 1=OFFSET
+;
+;fd_proc_pointer:	 DS.L	 1	 	 *PROC POINTER (TO TRANSITION VECTOR ACTUALLY!)
+;	 DC.L	 0	 	 *RESVD
+;	 DC.L	 0	 	 *RESVD		 
+dfs_error:	cstring	"Illegal floating point number"
+	align
+dfs_frag_error:	dc.b	"Can't process floating point numbers on this machine. (Need a PowerMac)",13
+	dc.b	"You need the native version running on a PowerMac.",13,0
+	align
+
+	global	define_float_single,define_float_double,define_sin_single
+	global	define_sin_double
+	extern	pass1_error,dcw_ppc
+	extern	fant_to_single,fant_to_double,fant_to_single_sin,fant_to_double_sin
+	extern	dcw_ppc_ent

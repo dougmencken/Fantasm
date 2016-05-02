@@ -1,0 +1,34 @@
+*******************************************************************************
+*Project:                                                                     *
+*Author:        Stu                                                           *
+*Filename:      r2d2_primary decode p55-p63                                   *
+*Version:                                                                     *
+*Date started:  12:04:30 on 25th August 1997                                  *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+
+p_55:
+	sub_in
+	sub_out
+	global	p_55
+p_58:
+	sub_in
+	sub_out
+	global	p_58
+	
+p_59:
+	sub_in
+	sub_out
+	global	p_59
+	
+p_62:
+	sub_in
+	sub_out
+	global	p_62
+
+p_63:
+	sub_in
+	sub_out
+	global	p_63

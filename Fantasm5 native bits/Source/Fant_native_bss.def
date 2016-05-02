@@ -1,0 +1,22 @@
+*******************************************************************************
+*Project:       Fantasm 5                                                     *
+*Author:        Rob'n'Stu                                                     *
+*Filename:      Fant_native_bss.def                                           *
+*Version:                                                                     *
+*Date started:  2:02:04 on 22nd August 1997                                   *
+*Rev. History:                                                                *
+*                                                                             *
+*                                                                             *
+*******************************************************************************
+the_instruction:	rs.w	1
+pass1_error_ptr:	rs.w	1
+prefs_flags_ptr:	rs.w	1
+field_1_ptr:	rs.w	1
+
+
+
+pipe_handle:		rs.w	1
+pipe_entry_offset_store:	rs.w	1
+pipe_exit_offset_store:		rs.w	1
+
+
