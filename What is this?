@@ -1,0 +1,36 @@
+General
+
+This is the Open Source release of Lightsoft's LIDE development kit, comprising of Anvil, Fantasm and other programs. 
+
+This source reflects a partially ported state to Mac OS X, which compiles and runs under Mac OS 8 and 9 but still has problems under Mac OS X.
+
+
+About the Source Release
+
+This program and it's source is copyright © Lightsoft Software (Tools) 2003 and is released under the GNU General Public License (GPL) as published by the Free Software Foundation; either version 2 of the license, or (at your option) any later version. The trademarks 'Anvil', 'Fantasm' and 'LIDE' are trademarks of Lightsoft and are not part of the GPL release.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details. 
+
+You should have received a copy of the GNU General Public License included in the same directory as this file, under the file name COPYING. If not, write to the Free Software Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA or contact support@lightsoft.co.uk.
+
+You can redistribute this program and/or modify it under the terms of the GNU General Public License .
+
+The names LIDE, Anvil, Fantasm and Lightsoft are not open source, and remain trademarks of Lightsoft. If you want to release it, call it something else. It is permissible to use "derived from Lightsoft's LIDE, Fantasm and Anvil" or/and to refer to the main application as a derivation of the Anvil name, for example "SuperAnvil". If in doubt ask Lightsoft for permission via support@lightsoft.co.uk.
+
+Since this source is released under the GPL version 2, this is OSI Certified Open Source Software - see http://www.opensource.org/ for details.
+
+We reserve the right to release the applications, tools, source or documentation under other licenses - but this will not include any additional code added under the GPL license.
+
+If the GPL license does not suit your purposes, the complete LIDE suite of applications is available separately containing the last full Mac OS 9 release under a Lightsoft license. The source is not however. If you have need to access the source for another reason under another license, please contact us at support@lightsoft.co.uk and we will consider it. We would strongly suggest that you work within the Open Source framework if at all possible.
+
+
+
+This source release is dedicated to Fluffy one of the Lightsoft cats (best known for her documentation), who passed away after what we believe was a car accident.
+
+
+The Lightsoft Team
+http://www.lightsoft.co.uk
+http://lightsoft.co.uk/forums/Open_Source_Fantasm/
+
+<EOF> 03 July 2003
+
