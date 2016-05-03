@@ -1,6 +1,6 @@
 
 beta:	equ	0	*set to 0 for release
-beta_exp_time:	equ	0xb53271df	*date to expire/25 June  99
+;beta_exp_time:	equ	0xb53271df	*date to expire/25 June  99
 
 	include call_ccp_macro
 
@@ -8,7 +8,7 @@ beta_exp_time:	equ	0xb53271df	*date to expire/25 June  99
 	reset_locals
 	local.l	my_pb_h,1
 
-fantasm_v5:
+fantasm:
 	entry
 **lxt tool entry code
 	if PPC
@@ -44,27 +44,26 @@ fantasm_v5:
 	bsr	fant_clear_up
 
 	sub_exit	a4
-	rts_	"fant_5"
+	rts_	"fantasm"
 
 fant_init:
 	tst.w	fant_has_been_initted(a5)
 	bne	dont_init
 
-	if	beta
+;	if	beta
 **beta, so check time
-	lea	beta_time(pc),a0
-	OSReadDateTime	a0,d0
-	lea	beta_time(pc),a0
-	qmove.l	(a0),d0
-	cmpi.l	#beta_exp_time,d0	*10th may plus 20 days in secs
-	nop
-	ble.s	load_resources
-	qmove.l	#128,d0	alert
-	bsr.l	do_alert
-	OSExitToShell
+;	lea	beta_time(pc),a0
+;	OSReadDateTime	a0,d0
+;	lea	beta_time(pc),a0
+;	qmove.l	(a0),d0
+;	cmpi.l	#beta_exp_time,d0	*10th may plus 20 days in secs
+;	nop
+;	ble.s	load_resources
+;	qmove.l	#128,d0	alert
+;	bsr.l	do_alert
+;	OSExitToShell
+;	endif
 
-beta_ok:
-	endif
 load_resources:
 **load table resources
 	qmove.l	#tables_fourchar,d0
@@ -965,27 +964,26 @@ lib_name:	pstring	"lightsoft_ppc"	*our shared lib name
 gresponse:	ds.l	1	*gestalt return
 crap:	ds.l	1
 	align
-	ifeq	registered
-	if	PPC
-fant_loaded_text:	dc.b	"Fantasm v6.1.0 DEMO (ISA=PPC). AltiVec 1.01",13,"Build #[build$] on [day$]/[month$]/2000",13,0
-	else
-fant_loaded_text:	dc.b	"Fantasm v6.1.0 DEMO (ISA=68K). AltiVec 1.01",13,"Build #[build$] on [day$]/[month$]/2000",13,0
-	endif
-	
-	else
+;	ifeq	registered
+;	if	PPC
+;fant_loaded_text:	dc.b	"Fantasm v6.1.0 DEMO (ISA=PPC). AltiVec 1.01",13,"Build #[build$] on [day$]/[month$]/2000",13,0
+;	else
+;fant_loaded_text:	dc.b	"Fantasm v6.1.0 DEMO (ISA=68K). AltiVec 1.01",13,"Build #[build$] on [day$]/[month$]/2000",13,0
+;	endif
+;	else
 	if	PPC
 fant_loaded_text:	dc.b	"Fantasm v6.1.0 (ISA=PPC). AltiVec 1.01",13,"Build #[build$] on [day$]/[month$]/2000",13,0
 	else
 fant_loaded_text:	dc.b	"Fantasm v6.1.0 (ISA=68K). AltiVec 1.01",13,"Build #[build$] on [day$]/[month$]/2000",13,0
 	endif
-	endif	;registered
+;	endif	;registered
 	align
 beta_time:	ds.l	2
 	align
 ;	if PPC
-;frag_loading_text:	 cstring	"Fantasm v5.1.0. (ISA=PPC) ©Lightsoft 1998 loading...",13,"Loading Fantasm extensions...",13
+;frag_loading_text:	cstring	"Fantasm v5.1.0. (ISA=PPC) ©Lightsoft 1998 loading...",13,"Loading Fantasm extensions...",13
 ;	 else
-;frag_loading_text:	 cstring	"Fantasm v5.1.0. (ISA=68K) ©Lightsoft 1998 loading...",13,"Loading Fantasm extensions...",13
+;frag_loading_text:	cstring	"Fantasm v5.1.0. (ISA=68K) ©Lightsoft 1998 loading...",13,"Loading Fantasm extensions...",13
 ;	 endif
 	align
 ;	public	events,update,activate,

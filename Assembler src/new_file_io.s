@@ -190,7 +190,7 @@ append_cr:
 ;	 move.l	2(a3),ioDirID(a0)
 ;	 clr.w	 iofdirindex(a0)
 ;	 move.w	#9,d0
-;	 dc.w	 _HFSDispatch	 registered call
+;	 dc.w	 _HFSDispatch
 ;	 tst.w	 d0
 ;	 beq.s	 got_folder
 ;	 moveq	 #-1,d0
@@ -221,7 +221,7 @@ append_cr:
 ;	 move.l	2(a1),ioDirID(a0)
 ;	 clr.w	 iofdirindex(a0)
 ;	 move.w	#9,d0
-;	 dc.w	 _HFSDispatch	 *Good old getcatinfo :-) !registered call
+;	 dc.w	 _HFSDispatch	 *Good old getcatinfo :-)
 ;	 tst.w	 d0
 ;	 beq.s	 got_file
 ;	 moveq	 #-1,d0

@@ -614,17 +614,16 @@ bad_macro:	qmove.l	a0,-(sp)
 	move.l	(sp)+,a0
 	rts
 	
-not_implemented:	qmove.l	a0,-(sp)	
+not_implemented:	qmove.l	a0,-(sp)
 	lea	ni_text(pc),a0
 	bsr.l	pass2_error
 	move.l	(sp)+,a0
 	rts
- 
+
 ************************************************************************* 
 lines_text:	DC.B	" Lines assembled into ",0
 bytes_text_2:	dc.b	" bytes",13,13,0
-ni_text:	dc.b	"Sorry, but a few instructions are not implemented"
-	dc.b	" in this unregistered version. Please register.",13,13,0
+ni_text:	 dc.b	 "Sorry, but a few instructions are yet not implemented",13,13,0
 bad_macro_text:	DC.B	"This Macro has not been defined.",13,13,0
 code_text:	dc.b	"Code is ",0
 	align
