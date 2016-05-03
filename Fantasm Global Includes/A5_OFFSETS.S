@@ -1,6 +1,13 @@
 
-curs_x:	globoff.w	 1	 *cursor x
-curs_y:	globoff.w	1	*cursor y .w
+* resource handles of tables
+ppc_flsyntax_table_Handle:	globoff.l	1
+ppc_flcode_table_Handle:	globoff.l	1
+ppc_fsyntax_table_Handle:	globoff.l	1
+ppc_fcode_table_Handle:		globoff.l	1
+ppc_cmp_code_table_Handle:		   globoff.l	   1
+
+curs_x:	globoff.w	1	*cursor x
+curs_y:	globoff.w	1	*cursor y
 	rs_align
 source_buff:	globoff.l	1
 file_buff1:	globoff.l	1	*file buffegloboff
@@ -10,15 +17,15 @@ file_pos1:	globoff.l	1	*where we are in each file
 file_pos2:	globoff.l	1
 file_pos3:	globoff.l	1
 long_var:	globoff.l	1	*gp long for param passing
-line_count:	globoff.l	1	*line counter .l
-char_count:	globoff.l	1	*total length of source.l
-labels:	globoff.l	1	*where the labels live .l
+line_count:	globoff.l	1	*line counter
+char_count:	globoff.l	1	*total length of source
+labels:	globoff.l	1	*where the labels live
 lab_val:	globoff.l	1	*label values live here
-lt_pos:	globoff.l	1	*lable table index .l (32=1)
+lt_pos:	globoff.l	1	*lable table index (32=1)
 lt_num:	globoff.w	1	*number of real labels.w
 	rs_align
-equates:	globoff.l	1	*table of equates values .l
-eq_val:	globoff.l	1	*equates values.l
+equates:	globoff.l	1	*table of equates values
+eq_val:	globoff.l	1	*equates values
 eq_pos:	globoff.l	1	*equates pos
 error_size:	globoff.l	1	*size of error buffer
 events_count:	globoff.w	1	*frame counter for events call

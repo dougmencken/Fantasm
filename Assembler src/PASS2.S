@@ -1,10 +1,8 @@
-*************************************************************************
-*PASS2				        *
-*STARTED 200294	Stuart Ball			        *
-*COMPLETED 110394			        *
-*CODE IS BUILT IN CODE_BUFFER - ADDRESSES WILL BE ABSOLUTE AS DEFINED   *
-*BY PC ON PASS 1			        *
-*************************************************************************
+*PASS2
+*STARTED 200294	Stuart Ball
+*COMPLETED 110394
+*CODE IS BUILT IN CODE_BUFFER - ADDRESSES WILL BE ABSOLUTE AS DEFINED
+*BY PC ON PASS 1
 
 pass2:
 	qmove.l	#0,d0
@@ -449,7 +447,9 @@ try_cmp:
 	lea 	ppc_cmp_string_table(pc),a2	*basic instruction table
 	bsr	inst_search		*in search_labs.s
 	bmi	try_macro_exp
-	lea	ppc_cmp_code_table(pc),a1 
+	;lea	ppc_cmp_code_table(pc),a1
+	move.l	ppc_cmp_code_table_Handle(a5),a1
+	move.l	(a1),a1
 **LXT change
 	qpush1	d0
 	lsl.l	#2,d0
@@ -646,7 +646,8 @@ code_text:	dc.b	"Code is ",0
 **v4
 	extern_data	ppc_string_table,ppc_code_table
 	extern_data	ppc_int_code_table,ppc_int_string_table
-	extern_data	ppc_cmp_code_table,ppc_cmp_string_table
+;	extern_data	ppc_cmp_code_table
+	extern_data 	ppc_cmp_string_table
 	extern_data	ppc_trap_code_table,ppc_trap_string_table
 	extern_data	ppc_fcode_table,ppc_fsyntax_table
 	extern_data	ppc_flsyntax_table,ppc_flcode_table

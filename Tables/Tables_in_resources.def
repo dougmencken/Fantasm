@@ -1,0 +1,8 @@
+
+tables_fourchar:	equ	"dTab"
+
+flsyntax_resID:		equ	1108
+flcode_resID:		equ	1109
+fcode_resID:		equ	1110
+fsyntax_resID:		equ	1111
+cmp_code_resID:		equ	1212

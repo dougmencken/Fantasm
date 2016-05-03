@@ -1,15 +1,14 @@
-*********************************************************************
-*MODULE:	PASS 1			*
-*DATE:	180594			*
-*LAST MODIFIED:	160794			*
-*PROGRAMMER:	S.BALL			*
-*VERSION:	3			*
-*FANT REL VER:	1			*
-*DESCRIPTION:	BUILDS LABEL TABLE AND CHECKS SYNTAX	*
-*********************************************************************
+*MODULE:	PASS 1
+*DATE:	180594
+*LAST MODIFIED:	160794
+*PROGRAMMER:	S.BALL
+*VERSION:	3
+*FANT REL VER:	1
+*DESCRIPTION:	BUILDS LABEL TABLE AND CHECKS SYNTAX
 
 *PASS1_NOW BUILDS THE LABEL TABLE AND CHECKS THE SYNTAX OF 
 *EVERYTHING (I HOPE!)
+
 pass1_now:
 	qmove.l	#4550,time_to_idle(a5)	*when we call a_idle
 	qmove.l	#0,d0
@@ -444,10 +443,15 @@ here2:	*address of here in link register
 try_integer:
 	cmpi.b	#"f",(a3)
 	bne.s	not_float1
-	lea 	ppc_fsyntax_table(pc),a2	*basic instruction table
+;	lea 	ppc_fsyntax_table(pc),a2	*basic instruction table
+	qmove.l	ppc_fsyntax_table_Handle(a5),a2
+	qmove.l	(a2),a2
 	bsr.l	inst_search		*in search_labs.s
 	bmi	not_inst
-	lea	ppc_fcode_table(pc),a1 
+
+;	lea	ppc_fcode_table(pc),a1
+	qmove.l	ppc_fcode_table_Handle(a5),a1
+	qmove.l	(a1),a1
 **LXT
 	qpush1	d0
 	lsl.l	#2,d0
@@ -485,10 +489,14 @@ not_float1:
 	cmpi.w	#"lf",(a3)
 	bne.s	not_float_load
 do_fl:
-	lea 	ppc_flsyntax_table(pc),a2	*basic instruction table
+	;lea 	 ppc_flsyntax_table(pc),a2	 *basic instruction table
+	qmove.l	ppc_flsyntax_table_Handle(a5),a2
+	qmove.l	(a2),a2
 	bsr.l	inst_search		*in search_labs.s
 	bmi	not_inst
-	lea	ppc_flcode_table(pc),a1 
+	;lea	ppc_flcode_table(pc),a1
+	qmove.l	ppc_flcode_table_Handle(a5),a1
+	qmove.l	(a1),a1
 **LXT
 	qpush1	d0
 	lsl.l	#2,d0
@@ -578,7 +586,9 @@ try_compare:
 	lea 	ppc_cmp_string_table(pc),a2	*basic instruction table
 	bsr.l	inst_search		*in search_labs.s
 	bmi	not_inst
-	lea	ppc_cmp_code_table(pc),a1 
+	;lea	ppc_cmp_code_table(pc),a1
+	move.l	ppc_cmp_code_table_Handle(a5),a1
+	move.l	(a1),a1
 **LXT
 	qpush1	d0
 	lsl.l	#2,d0
@@ -1419,24 +1429,22 @@ composite_line:	ds.b	1200
 	extern	try_macro,pass1_error,inst_search
 	extern	search_labp2,search_lab,recurs_eval,copy_macro
 	extern	printit,printcr,print_space,pass1_warning
-	
+
 	extern	ass_table,ppc_ass_table,ppc_trap_jumptable,ppc_cmp_jumptable
 	extern	ppc_fass_table,ppc_int_jumptable,ppc_flass_table,inst_search12
 	extern_data	inst_table_lower,inst_table,code_table
 **v4
 	extern_data	ppc_string_table,ppc_code_table
 	extern_data	ppc_int_code_table,ppc_int_string_table
-	extern_data	ppc_cmp_code_table,ppc_cmp_string_table
+;	extern_data	ppc_cmp_code_table
+	extern_data ppc_cmp_string_table
 	extern_data	ppc_trap_code_table,ppc_trap_string_table
-	extern_data	ppc_fcode_table,ppc_fsyntax_table
-	extern_data	ppc_flsyntax_table,ppc_flcode_table
 	extern_data	ppc_reserved_table,ppc_vector_string_table,ppc_vector_code_table
 
-	
 	extern	replace_requs
 	extern	pass1_advice,dir_search
 	extern	replace_params2
-	
+
 	extern	lab_tree_insert,lab_tree_search
 	extern	equ_tree_search,equ_tree_insert
 	extern	check_idle,test_for_locals,expand_internal_strings

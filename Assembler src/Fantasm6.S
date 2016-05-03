@@ -40,9 +40,9 @@ fantasm_v5:
 	beq	translate
 	cmpi.l	#6,d0
 	beq	fant_read_prefs
-	clr.l	d0
-	move.l	command_save(a5),a0
-	qmove.l	d0,(a0)
+
+	bsr	fant_clear_up
+
 	sub_exit	a4
 	rts_	"fant_5"
 
@@ -58,13 +58,56 @@ fant_init:
 	qmove.l	(a0),d0
 	cmpi.l	#beta_exp_time,d0	*10th may plus 20 days in secs
 	nop
-	ble.s	beta_ok
+	ble.s	load_resources
 	qmove.l	#128,d0	alert
 	bsr.l	do_alert
 	OSExitToShell
 
 beta_ok:
 	endif
+load_resources:
+**load table resources
+	qmove.l	#tables_fourchar,d0
+
+	clr.l	ppc_flsyntax_table_Handle(a5)
+	qcmove.w	#flsyntax_resID,d1
+	OSGet1Resource	d0,d1,d0
+	move.l	d0,ppc_flsyntax_table_Handle(a5)
+	move.l	ppc_flsyntax_table_Handle(a5),a0
+	OSHLock	a0
+
+	clr.l	ppc_fsyntax_table_Handle(a5)
+	qmove.l	#tables_fourchar,d0
+	qcmove.w	#fsyntax_resID,d1
+	OSGet1Resource	d0,d1,d0
+	move.l	d0,ppc_fsyntax_table_Handle(a5)
+	move.l	ppc_fsyntax_table_Handle(a5),a0
+	OSHLock	a0
+
+	clr.l	ppc_flcode_table_Handle(a5)
+	qmove.l	#tables_fourchar,d0
+	qcmove.w	#flcode_resID,d1
+	OSGet1Resource	d0,d1,d0
+	move.l	d0,ppc_flcode_table_Handle(a5)
+	move.l	ppc_flcode_table_Handle(a5),a0
+	OSHLock	a0
+
+	clr.l	ppc_fcode_table_Handle(a5)
+	qmove.l	#tables_fourchar,d0
+	qcmove.w	#fcode_resID,d1
+	OSGet1Resource	d0,d1,d0
+	move.l	d0,ppc_fcode_table_Handle(a5)
+	move.l	ppc_fcode_table_Handle(a5),a0
+	OSHLock	a0
+
+	clr.l	ppc_cmp_code_table_Handle(a5)
+	qmove.l	#tables_fourchar,d0
+	qcmove.w	cmp_code_resID,d1
+	OSGet1Resource	d0,d1,d0
+	move.l	d0,ppc_cmp_code_table_Handle(a5)
+	move.l	ppc_cmp_code_table_Handle(a5),a0
+	OSHLock	a0
+
 **get beep sound
 	qmove.l	#"snd ",d0
 	qcmove.w	#128,d1
@@ -95,12 +138,36 @@ dont_init:
 	qmove.l	d0,(a0)
 	unlk	a4
 	rts_	"fant_init"
+
 fant_clear_up:
-	move.l	command_save(a5),a0
+**release table resources
+	move.l	ppc_flsyntax_table_Handle(a5),a0
+	beq.s	release_fsyntax_table
+	OSReleaseResource  a0
+release_fsyntax_table:
+	move.l	ppc_fsyntax_table_Handle(a5),a0
+	beq.s	release_flcode_table
+	OSReleaseResource  a0
+release_flcode_table:
+	move.l	ppc_flcode_table_Handle(a5),a0
+	beq.s	release_fcode_table
+	OSReleaseResource  a0
+release_fcode_table:
+	move.l	ppc_fcode_table_Handle(a5),a0
+	beq.s	release_cmp_code_table
+	OSReleaseResource  a0
+release_cmp_code_table:
+	move.l	ppc_cmp_code_table_Handle(a5),a0
+	beq.s	clear_save_command
+	OSReleaseResource  a0
+
+clear_save_command:
 	clr.l	d0
+	move.l	command_save(a5),a0
 	qmove.l	d0,(a0)
-	unlk	a4
+
 	rts_	"fant_clear_up"
+
 fant_read_prefs:
 	qmove.l	#"myPF",d0
 	qmove.l	#128,d1
@@ -250,6 +317,7 @@ fault4:
 
 	unlk	a4
 	rts_	"fant_read_prefs"
+
 translate:
 	global	translate
 **check personality at 8(a1) - a686 or appp
@@ -726,7 +794,7 @@ load_frag:
 ;
 ;	 bne.s	 report_frag_error
 ;
-;	 st	 frag_loaded(a5)
+;	 st	frag_loaded(a5)
 ;dont_load_again:
 ;no_ppc:	rts_	 "get_accel"
 ;report_frag_error:
@@ -935,4 +1003,4 @@ beta_time:	ds.l	2
 	extern	ass_remote_entry,init_mem
 	extern	r2d2_init,r2d2_term
 	extern	getmem,init_graph_lib
-	
+

@@ -55,21 +55,23 @@ ppc_cmp_string_table:	dc.b	"cmpi",0,0,0,0
 	dc.b	"cmplw",0,0,0
 	dc.b	"cmpld",0,0,0
 	
-ppc_cmp_code_table:	dc.l	$2c000000	*CMPI
-	dc.l	$2c000000	*CMPWI
-	dc.l	$2c200000	*CMPDI
-	dc.l	$28000000	*CMPLI
-	dc.l	$28000000	*CMPLWI
-	dc.l	$28200000	*CMPLDI
-	dc.l	$7c000000	*CMP
-	dc.l	$7c000000	*cmpw
-	dc.l	$7c200000	*cmpd
-	dc.l	$7c000040	*cmpl
-	dc.l	$7c000040	*CMPLW
-	dc.l	$7c200040	*cmpld
-	rts_	"PPC_cmp_ass_table_Rev1"
-	align
-	global	ppc_cmp_jumptable,ppc_cmp_string_table,ppc_cmp_code_table
+;ppc_cmp_code_table:	dc.l	$2c000000	*CMPI
+;	dc.l	$2c000000	*CMPWI
+;	dc.l	$2c200000	*CMPDI
+;	dc.l	$28000000	*CMPLI
+;	dc.l	$28000000	*CMPLWI
+;	dc.l	$28200000	*CMPLDI
+;	dc.l	$7c000000	*CMP
+;	dc.l	$7c000000	*cmpw
+;	dc.l	$7c200000	*cmpd
+;	dc.l	$7c000040	*cmpl
+;	dc.l	$7c000040	*CMPLW
+;	dc.l	$7c200040	*cmpld
+;	rts_	"PPC_cmp_ass_table_Rev1"
+;	align
+
+	global	ppc_cmp_jumptable,ppc_cmp_string_table
+;	global	ppc_cmp_code_table
 	extern	cmpip,cmpwi,sixty_four_warn,cmpp,cmpw
 	else
 ppc_cmp_jumptable
