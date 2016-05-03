@@ -1,4 +1,6 @@
+
 	include	client_commands.def
+
 *******************************************************************************
 *Project:       Anvil                                                         *
 *Author:        Stuart Ball                                                   *
@@ -9,36 +11,8 @@
 *                                                                             *
 *                                                                             *
 *******************************************************************************
-call_ccp:	macro
-	push	a4
+	include call_ccp_macro
 
-;	save_all
-;	lea	leaving_link(pc),a0
-;	move.l	a0,d0
-;	Xcall	DebugStr
-;	restore_all
-	macs_last
-	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
-							; ref: IM PPC System SW 1-47
-						; 112=keep octal aligned
-
-	mr	r3,r20	;params ptr
-	stw	R2,20(sp)	*save my RTOC
-	lwz	r0,callback(r25) 	*get callee address
-	mtctr	r0		*prepare branch
-	lwz	R2,callback_toc(r25)	*set callee RTOC
-	bctrl			*bsr to callee
-	lwz	r2,20(sp)	*get my toc back
-	addi	sp,sp,112
-	macs_first
-;	save_all
-;	lea	in_link(pc),a0
-;	move.l	a0,d0
-;	Xcall	DebugStr
-;	restore_all
-	pop	a4
-	endm
-	
 **needs C string in a0
 send_to_error:
 	reset_locals

@@ -1,0 +1,9 @@
+
+include_LXT_68k: macro
+
+	include LXT_speed_extensions3
+	include Universal_OS_calls3.LXT
+	include LXT_Support3_68K
+
+	endm
+

@@ -1,39 +1,8 @@
-**************************************************************************
-*fantasm_shell.s - the user interface		         *
-**************************************************************************
+
 beta:	equ	0	*set to 0 for release
 beta_exp_time:	equ	0xb53271df	*date to expire/25 June  99
 
-*120198 sb
-call_ccp:	macro
-	push	a4
-
-;	save_all
-;	lea	leaving_link(pc),a0
-;	move.l	a0,d0
-;	Xcall	DebugStr
-;	restore_all
-	macs_last
-	stwu	sp,-112(sp)	; parameter area and linkage area for subroutine
-							; ref: IM PPC System SW 1-47
-						; 112=keep octal aligned
-
-	mr	r3,r20	;params ptr
-	stw	R2,20(sp)	*save my RTOC
-	lwz	r0,callback(r25) 	*get callee address
-	mtctr	r0		*prepare branch
-	lwz	R2,callback_toc(r25)	*set callee RTOC
-	bctrl			*bsr to callee
-	lwz	r2,20(sp)	*get my toc back
-	addi	sp,sp,112
-	macs_first
-;	save_all
-;	lea	in_link(pc),a0
-;	move.l	a0,d0
-;	Xcall	DebugStr
-;	restore_all
-	pop	a4
-	endm
+	include call_ccp_macro
 
 **tool version
 	reset_locals
@@ -58,6 +27,7 @@ fantasm_v5:
 	else
 	move.l	8(sp),a1	*parameter block argv
 	endif
+
 	sub_entry	a4
 	qmove.l	a1,command_save(a5)
 	qmove.l	(a1),callback(a5)
@@ -75,9 +45,11 @@ fantasm_v5:
 	qmove.l	d0,(a0)
 	sub_exit	a4
 	rts_	"fant_5"
+
 fant_init:
 	tst.w	fant_has_been_initted(a5)
 	bne.s	dont_init
+
 	if	beta
 **beta, so check time
 	lea	beta_time(pc),a0
