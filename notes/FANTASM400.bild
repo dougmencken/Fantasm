@@ -1,16 +1,12 @@
-*********************************
-*FANTASM PROJECT FILE - 281094			            *
-*****************************************************************************
-*********************************************************************
-*MODULE:	FANTASM BUILD FILE		    *
-*DATE:	281094			    *
-*LAST MODIFIED:	011095			    *
-*PROGRAMMER:	S.BALL			    *
-*VERSION:	1.00			    *
-*FANT REL VER:	400			    *
-*DESCRIPTION:				    *
-*VERSION INFO:                			    *
-*********************************************************************
+*MODULE:	FANTASM BUILD FILE
+*DATE:	281094
+*LAST MODIFIED:	011095
+*PROGRAMMER:	S.BALL
+*VERSION:	1.00
+*FANT REL VER:	400
+*DESCRIPTION:
+*VERSION INFO:
+
 *BUILD SWITCHES
 */A - ASSEMBLE THE FOLLOWING FILES
 */L - LINK THE FOLLOWING FILES
@@ -21,6 +17,7 @@
 */V 	VERBOSE MODE
 */c "1234" - set creator type
 *
+
 ***BUILD FANTASM 3.00
 *ASSEMBLE IF OUT OF DATE THE FOLLOWING FILES
 /G FANTASM_EQUS		*GLOBAL INCLUDE FILE
