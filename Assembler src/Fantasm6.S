@@ -48,7 +48,7 @@ fantasm_v5:
 
 fant_init:
 	tst.w	fant_has_been_initted(a5)
-	bne.s	dont_init
+	bne	dont_init
 
 	if	beta
 **beta, so check time

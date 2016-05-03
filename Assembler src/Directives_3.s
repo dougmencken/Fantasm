@@ -70,9 +70,9 @@ al1:	tst.b	(a1)			*no filed 3?
 	beq	align_on
 	
 	qmove.w flags(a5),f_save(a5) 	 save state of flags
-	qbset #1,flags(a5) 	 *pretend we"re on pass 2 even if we"re not!
+	qbset #1,flags(a5) 	*pretend we"re on pass 2 even if we"re not!
 	qmove.l #0,d1
-	bsr get_numb 	 	 *returns number pointed to in a1 in d0 or d1=-1
+	bsr.l   get_numb 		     *returns number pointed to in a1 in d0 or d1=-1
 	qmove.w f_save(a5),flags(a5)
 	tst.l	d0
 	beq	align_error
@@ -186,17 +186,17 @@ no_align:
 	rts_	"default_align"
 align_error:
 	lea	align_error_text(pc),a0
-	bsr	pass2_error
+	bsr.l	pass2_error
 	rts_	"align_error"
 
 align_on:
 	lea	al_on_text(pc),a0
-	bsr	pass1_advice
+	bsr.l	pass1_advice
 	qbclr	#2,ppc_flags1(a5)
 	rts
 align_off:
 	lea	al_off_text(pc),a0
-	bsr	pass1_warning
+	bsr.l	pass1_warning
 	qbset	#2,ppc_flags1(a5)
 	rts_	"align_on_off"
 ************
@@ -204,7 +204,7 @@ do_toc_routine:
 	btst	#0,ppc_flags1(a5)
 	bne.s	ppctr_ok
 	lea	ppc_only_text(pc),a0
-	bsr	pass1_error
+	bsr.l	pass1_error
 	rts_	"Do_toc_routinel"
 ppctr_ok:
 **if pass 2 then we need to do a dummy call so it gets exported in link
@@ -214,7 +214,7 @@ ppctr_ok:
 	lea	field_1(a5),a3
 	tst.b	(a3)
 	beq.s	need_toc_label
-	bsr	search_labp2	*returns d0=pos or -1 if not found
+	bsr.l	search_labp2	*returns d0=pos or -1 if not found
 ;	tst.w	d0
 	bmi.s	code_def_not_found
 
@@ -263,12 +263,12 @@ do_dummy:
 
 	lea	field_1(a5),a3
 	move.l	toc_code_names(a5),a4
-	bsr	search_labp2	*search equs using pass2 algorithm
+	bsr.l	search_labp2	*search equs using pass2 algorithm
 ;	tst.w	d0
 	bge.s	found_in_tc	*got it
 **try labels for an extern
 	move.l	labels(a5),a4	*table to be searched
-	bsr	search_labp2	*search for this label (was lab)
+	bsr.l	search_labp2	*search for this label (was lab)
 ;	tst.w	d0
 	bge.s	found_in_tc1
 	moveq	#-1,d1
@@ -348,7 +348,7 @@ ppc_ok:
  	move.l	tocnames_tree(a5),a2
 	bsr.l	tn_tree_search
 	tst.l	d0	
-;	bsr	SEARCH_LABP2	*returns d0=pos or -1 if not found
+;	bsr.l	SEARCH_LABP2	*returns d0=pos or -1 if not found
 ;	tst.w	d0
 	bmi.s	import_not_found
 **if it is found we need do nothing

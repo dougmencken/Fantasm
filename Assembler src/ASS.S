@@ -1,28 +1,28 @@
-*********************************************************************************
-*MODULE:	ASSEMBLE                                                        *
-*DATE:      180594                                                              *
-*LAST MODIFIED:       Jan2000                                                   *
-*PROGRAMMER:    S.BALL                                                          *
-*VERSION:       4.00                                                            *
-*FANT REL VER:  4.00                                                            *
-*DESCRIPTION:   CALLS ALL RELEVANT ROUTINES                                     *
-*VERSION INFO:                                                                  *
-*3: 16/07/94	FANTASM RELEASE 1						*
-*4: 22/07/94	RELEASE 1 WITH CRIPPLES IF UNREGISTERED=1			*
-*5: 240794	RS DIRECTIVE + 8 BIT WELCOME ALERT				*
-*	FASTER FILE LOADING AND MORE EFFICIENT MEM ALLOC   			*
-*6: 250794	JUMP TABLE FOR DIRECTIVES + MEMUSEAGE SHOWS RELOC   		*
-*FANT REL VER   1.01								*
-*1 090894	FIXED .BIN EXTENSIONS						*
-*FANT REL VER	2.00    							*
-*	MACROS									*
-*modified 190195 for gloabl a5 offsets						*
-*Modified 100895 for FSspecs                                                    *
+*MODULE:	ASSEMBLE
+*DATE:      180594
+*LAST MODIFIED:       Jan2000
+*PROGRAMMER:    S.BALL
+*VERSION:       4.00
+*FANT REL VER:  4.00
+*DESCRIPTION:   CALLS ALL RELEVANT ROUTINES
+*VERSION INFO:
+*3: 16/07/94	FANTASM RELEASE 1
+*4: 22/07/94	RELEASE 1 WITH CRIPPLES IF UNREGISTERED=1
+*5: 240794	RS DIRECTIVE + 8 BIT WELCOME ALERT
+*	FASTER FILE LOADING AND MORE EFFICIENT MEM ALLOC
+*6: 250794	JUMP TABLE FOR DIRECTIVES + MEMUSEAGE SHOWS RELOC
+*FANT REL VER   1.01
+*1 090894	FIXED .BIN EXTENSIONS
+*FANT REL VER	2.00
+*	MACROS
+*modified 190195 for gloabl a5 offsets
+*Modified 100895 for FSspecs
 *
-*modified 190696 for rs accumlator for bss section				*
-*********************************************************************************				
-*********************************************************************
+*modified 190696 for rs accumlator for bss section
+
 **NEEDS A6 POINTING TO OUR VARIABLES
+
+
 	align
 
 	clr.b	flags5(a5)
@@ -193,10 +193,10 @@ fant_entry_b:			*build enters here
 ;	 OSNewHandleClear	 d0,a0
 ;	 move.l	a0,d0
 ;	 beq	 fatal_sys	 no can do
-;	 qmove.l	a0,line_numbers_table_h(a5)	 so we can delete it
+;	 qmove.l	a0,line_numbers_table_h(a5)	so we can delete it
 ;	 OSHLock	a0
 ;	 
-;	 move.l	line_numbers_table_h(a5),a0	 so we can delete it
+;	 move.l	line_numbers_table_h(a5),a0	so we can delete it
 ;	 move.l	(a0),a0
 ;	 move.l	a0,line_numbers_table(a5)
 
@@ -268,7 +268,7 @@ done_ppc:
 				* after "in part of else" condition at end of previous assembly.
 
 	qmove.b	d0,half_size(a5)	*lxt mod
-	bsr	pass1	do pass1 with o.p in code buffer
+	bsr.l	pass1	do pass1 with o.p in code buffer
 	bmi	fatal	if minus flag then fatal error
 
 	tst.b	abort(a5)
@@ -365,9 +365,9 @@ done_ppc1:
 wl_ppc:
 	bsr.l	write_link_ppc
 	bra.s	write_done
-;	 
+
 not_link:
-write_done:	 
+write_done:
 	btst	#0,flags7(a5)
 	beq.s	not_ppc10
 	btst	#4,option_flags(a5)	run in mac ram?
@@ -839,7 +839,7 @@ print_long:	cmpi.l	#9999999,d0
 	cmpi.l	#999999,d0
 	blt.s	do_hund_thou
 	move.l	#1000000,d0	get millions
-	bsr	long_div	divide d1.l by d0.l with remainder in d0
+	bsr.l	long_div	divide d1.l by d0.l with remainder in d0
 	addi.b	#"0",d1
 	qmove.b	d1,(a0)+
 	qmove.l	d0,d6
@@ -847,7 +847,7 @@ print_long:	cmpi.l	#9999999,d0
 	bsr	printit
 	qmove.l	d6,d1
 do_hund_thou:	qmove.l	#100000,d0	get 100 thousands
-	bsr	long_div
+	bsr.l	long_div
 	addi.b	#"0",d1
 	qmove.b	d1,(a0)+
 	qmove.l	d0,d6
@@ -855,7 +855,7 @@ do_hund_thou:	qmove.l	#100000,d0	get 100 thousands
 	blt	long_ent	yes, print word routine
 	qmove.l	d6,d1	no,get 10thousands
 do_ten_thou:	qmove.l	#10000,d0
-	bsr	long_div
+	bsr.l	long_div
 	addi.b	#"0",d1
 	qmove.b	d1,(a0)+
 	qmove.l	d0,d6
@@ -1478,7 +1478,7 @@ mem_mismatch:	lea	mem_mis_text(pc),a0
 	rts_		"mem_mism"	    
 **now transfer menu options to assembler flags
 tx_opts:	move.w	ext_options(a5),d0	get menu selections
-	qmove.w	#0,d1	   	   will be option-flags
+	qmove.w	#0,d1	   	will be option-flags
 	btst	#4,d0	linkable?
 	beq.s	not_tx_link	no
 	qbset	#6,flags5(a5)	yes

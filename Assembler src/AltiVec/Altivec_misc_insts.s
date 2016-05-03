@@ -102,7 +102,7 @@ dst_end:
 do_dss:
 *get stream
 	push	d1
-	bsr	get_1_imm		*in d2
+	bsr.l	get_1_imm		*in d2
 	pop	d1
 	tst.l	d0
 	bne	dss_end
@@ -291,7 +291,7 @@ dbd_op3_ok:
 	btst	#0,postfix_flags(a5)
 	beq.s	no_dot_dbd
 	bset	#10,d1	*set dot bit
-	bclr	#0,postfix_flags(a5)	*so we dont get a dot warning!
+	bclr	#0,postfix_flags(a5)	*so dont get a dot warning
 
 no_dot_dbd:
 	bsr.l	put_ppc
@@ -352,7 +352,7 @@ dbd_op3_ok4:
 	btst	#0,postfix_flags(a5)
 	beq.s	no_dot_dbd4
 	bset	#10,d1	*set dot bit
-	bclr	#0,postfix_flags(a5)	*so we dont get a dot warning!
+	bclr	#0,postfix_flags(a5)	*so dont get a dot warning
 
 no_dot_dbd4:
 	bsr.l	put_ppc

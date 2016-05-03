@@ -42,7 +42,7 @@ pass1_now:
  qmove.l	d0,macro_num(a5)	*number of macros
  qmove.w	d0,m_label_count(a5)	*auto label counter
  qmove.b	d0,if_depth(a5)
- qmove.l #1,line_count(a5) 	 *line counter
+ qmove.l #1,line_count(a5) 	*line counter
  qbset #0,flags(a5) 	 *set assembly flag
  qbclr #1,flags(a5) 	 *clear pass 2 flag
  qbclr	#7,flags5(a5)	*clear defall flag
@@ -96,7 +96,7 @@ code_sz_ok:
 no_idle1:
 	andi.b	#%10011111,flags(a5)	*clear bits 5 and 6 of flags
 
-	qmove.l a0,source_save(a5) 	 *save source pos in case of error
+	qmove.l a0,source_save(a5) 	*save source pos in case of error
 	addq.l #1,line_count(a5) 	*another line assembled
 
 **********v4.10
@@ -164,7 +164,7 @@ instruction:
 	tst.b	macros_first(a5)
 	beq.s	skip_mac1
 	btst	  #0,flags(a5)
-	beq	 skip_mac1	*assembly off, so next line
+	beq	skip_mac1	*assembly off, so next line
 	bsr.l	try_macro	*in macro_routines.s - change for 5.1
 	beq	pass1_loop
 skip_mac1:
@@ -341,10 +341,10 @@ assemble:
 	endif
 **changed for 5.1
 	lea inst_table(pc),a2 	*basic instruction table
-	bsr	inst_search	*in search_labs.s
+	bsr.l	inst_search	*in search_labs.s
 	beq	got_inst_upper
 	lea inst_table_lower(pc),a2 	*basic instruction table
-	bsr	inst_search	*in search_labs.s
+	bsr.l	inst_search	*in search_labs.s
 	bmi.s not_inst
 got_inst_upper:
 	lea code_table(pc),a1 
@@ -407,7 +407,7 @@ not_poss_mcrfs:
 
 do_branches:
 	lea 	ppc_string_table(pc),a2	*basic instruction table
-	bsr	inst_search		*in search_labs.s
+	bsr.l	inst_search		*in search_labs.s
 	bmi.s	not_inst
 	lea	ppc_code_table(pc),a1 
 **LXT
@@ -445,7 +445,7 @@ try_integer:
 	cmpi.b	#"f",(a3)
 	bne.s	not_float1
 	lea 	ppc_fsyntax_table(pc),a2	*basic instruction table
-	bsr	inst_search		*in search_labs.s
+	bsr.l	inst_search		*in search_labs.s
 	bmi	not_inst
 	lea	ppc_fcode_table(pc),a1 
 **LXT
@@ -486,7 +486,7 @@ not_float1:
 	bne.s	not_float_load
 do_fl:
 	lea 	ppc_flsyntax_table(pc),a2	*basic instruction table
-	bsr	inst_search		*in search_labs.s
+	bsr.l	inst_search		*in search_labs.s
 	bmi	not_inst
 	lea	ppc_flcode_table(pc),a1 
 **LXT
@@ -538,7 +538,7 @@ not_float_load:
 	cmpi.b	#"v",(a3)
 	beq	try_vector	
 	lea 	ppc_int_string_table(pc),a2	*basic instruction table
-	bsr	inst_search		*in search_labs.s
+	bsr.l	inst_search		*in search_labs.s
 	bmi	not_inst
 	lea	ppc_int_code_table(pc),a1 
 **LXT
@@ -576,7 +576,7 @@ here5:	*address of here in link register
 
 try_compare:
 	lea 	ppc_cmp_string_table(pc),a2	*basic instruction table
-	bsr	inst_search		*in search_labs.s
+	bsr.l	inst_search		*in search_labs.s
 	bmi	not_inst
 	lea	ppc_cmp_code_table(pc),a1 
 **LXT
@@ -612,7 +612,7 @@ here6:	*address of here in link register
 	rts_	"powerpc_asm_integer_cmp"
 try_trap:
 	lea 	ppc_trap_string_table(pc),a2	*basic instruction table
-	bsr	inst_search		 *in search_labs.s
+	bsr.l	inst_search		 *in search_labs.s
 	bmi	not_inst
 	lea	ppc_trap_code_table(pc),a1 
 **LXT
@@ -648,7 +648,7 @@ here7:	*address of here in link register
 
 try_vector:
 	lea 	ppc_vector_string_table(pc),a2	*basic instruction table
-	bsr	inst_search12		 *in search_labs.s
+	bsr.l	inst_search12		 *in search_labs.s
 	bmi	not_inst
 	lea	ppc_vector_code_table(pc),a1 
 	
@@ -926,11 +926,11 @@ splat:
 
 
 ;	move.l	equates(a5),a4	search equates
-;	bsr	search_labp2
+;	bsr.l	search_labp2
 ;	bge	defined_error
 	
 ; movea.l labels(a5),a4 	*labels live here
-; bsr search_labp2 	   *see if it is defined already returns d0
+; bsr.l search_labp2 	  *see if it is defined already returns d0
 ; bge defined_error
 
 ;insert_label:		*external uses this entry 
@@ -1061,7 +1061,7 @@ cl_end:
 
 
 ; 	 move.l	labels(a5),a4
-;	bsr	search_labp2
+;	bsr.l	search_labp2
 ;	debug
  	qmove.l	labels(a5),tree_strings_ptr(a5)
  	move.l	labels_tree(a5),a2
@@ -1078,7 +1078,7 @@ cl_end:
 
 
 ; movea.l equates(a5),a4 	 *labels live here
-; bsr search_labp2 	 *see if it is defined already returns d0
+; bsr.l search_labp2 	  *see if it is defined already returns d0
 * tst.w d0 		*-1=not found else position
 ; bge defined_error
  
@@ -1109,11 +1109,11 @@ cl_def_end:	rts_	"copy_equ"
 copy_m_to_buf:	
 
 	cmp.b	#".",(a3)		; ***** llbls-rp200797
-	beq.s	macro_local_error	; ***** llbls-rp200797
+	beq	macro_local_error	; ***** llbls-rp200797
 
 
 	move.l	macro_labels(a5),a4
-	bsr	search_labp2	use pass 2 search algorithm
+	bsr.l	search_labp2	use pass 2 search algorithm
 *	tst.w	d0
 	bge.s	defined_error
 
